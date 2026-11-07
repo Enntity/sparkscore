@@ -68,8 +68,8 @@ cd sparkscore
 ./start.sh
 ```
 
-The first run takes as long as two downloads, and later runs start in about
-a minute:
+The first run is two downloads, about 6 GB of image and 22 GB of weights:
+under 10 minutes on a fast connection. Later runs start in about a minute.
 
 1. **Image.** It pulls the SparkScore image (`ghcr.io/enntity/sparkscore`):
    Atlas built at the commit pinned in
