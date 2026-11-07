@@ -21,4 +21,8 @@ engine. What counts is decision quality and latency.
   repository, except in unedited receipts under `results/*/raw/`.
 - New files carry an SPDX header. Credit ideas and code taken from other
   projects (origin, license) in code, docs and NOTICE.
+- The image tag is derived from `install/` and `tools/`. After changing
+  either, build on a Spark and publish it (`install/build.sh`, then
+  `docker push $(install/build.sh --tag)`), or `./start.sh` falls back to a
+  source build.
 - Before sending a change, run the checks in `.github/workflows/static.yml`.

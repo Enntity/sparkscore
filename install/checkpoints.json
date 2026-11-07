@@ -22,6 +22,11 @@
       "format_reference": "a2genesis/Qwen3.8-27B-NVFP4 (ModelOpt MIXED_PRECISION: MLP NVFP4 W4A16, attention/GDN projections FP8)",
       "format_reference_revision": "bfd9b31207712e0850eec9da32261e8c5ee16af7",
       "built_with": "install/convert.sh (tools/nvfp4_convert.py convert --src d3-ultra --ref Qwen3.8-27B-NVFP4 --readout d3-ultra --drop-mtp)",
+      "published": {
+        "repo": "Enntity/d3-ultra-NVFP4",
+        "revision": "90766bbda88697ac63106f06c38fe6f8f2c327b5",
+        "note": "the output of install/convert.sh, byte-identical (install/d3-ultra-nvfp4.sha256); install/fetch.sh downloads it"
+      },
       "notes": "Qwen3.8-27B decision model. lm_head synthesized as BF16: d3's FP32 readout rows (cast to BF16) at the code token ids, zeros elsewhere; serve with --lm-head-dtype bf16. Needs Atlas prefix_bidir (/v1/score \"attention\": \"prefix_bidir\"); template d3-ultra. FP8 input_scale copied from the reference (calibrated on base Qwen3.8).",
       "serve": {
         "engine": "install/atlas-source.json",

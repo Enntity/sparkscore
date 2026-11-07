@@ -11,7 +11,7 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 product=$(cd "$here/.." && pwd)
 tree=$( { git -C "$product" rev-parse HEAD:install; git -C "$product" rev-parse HEAD:tools; } | sha1sum | cut -c1-12)
-image=${SPARKSCORE_IMAGE_REPO:-sparkscore}:$tree
+image=${SPARKSCORE_IMAGE_REPO:-ghcr.io/enntity/sparkscore}:$tree
 [[ ${1:-} == --tag ]] && { echo "$image"; exit 0; }
 [[ $# == 0 ]] || { echo 'usage: install/build.sh [--tag]' >&2; exit 2; }
 [[ -z $(git -C "$product" status --porcelain --untracked-files=all -- install tools) ]] || {

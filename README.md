@@ -59,7 +59,7 @@ That is the model's placement, not a SparkScore measurement.
 ## Quickstart
 
 You need one DGX Spark (GB10, DGX OS with Docker and the NVIDIA Container
-Toolkit), about 150 GB of free disk and an internet connection for the first
+Toolkit), about 40 GB of free disk and an internet connection for the first
 run.
 
 ```bash
@@ -68,17 +68,24 @@ cd sparkscore
 ./start.sh
 ```
 
-The first run takes about an hour, and later runs start in about a minute:
+The first run takes as long as two downloads, and later runs start in about
+a minute:
 
-1. **Build.** It builds the image: Atlas from source at the commit pinned in
-   [install/atlas-source.json](install/atlas-source.json), plus the harness
-   (20–40 minutes).
-2. **Download and convert.** It downloads d3-ultra and the ModelOpt format
-   reference at pinned revisions (about 74 GB, both Apache-2.0, no login) and
-   converts d3-ultra to NVFP4. It then checks the result against the reference
-   build's checksums byte for byte.
+1. **Image.** It pulls the SparkScore image (`ghcr.io/enntity/sparkscore`):
+   Atlas built at the commit pinned in
+   [install/atlas-source.json](install/atlas-source.json), plus the harness.
+2. **Weights.** It downloads the NVFP4 weights
+   ([Enntity/d3-ultra-NVFP4](https://huggingface.co/Enntity/d3-ultra-NVFP4),
+   22 GB, Apache-2.0) at a pinned revision, and checks every file against
+   [install/d3-ultra-nvfp4.sha256](install/d3-ultra-nvfp4.sha256).
 3. **Serve and smoke-test.** It serves on `127.0.0.1:8015` and sends one
    smoke request.
+
+**To build everything yourself:** `FROM_SOURCE=1 ./start.sh` compiles Atlas
+from source (20–40 minutes). It also downloads d3-ultra and the ModelOpt
+format reference at pinned revisions and converts d3-ultra to NVFP4 (about
+96 GB of disk, 15 minutes). The conversion is deterministic, so the result
+matches the published weights byte for byte.
 
 Then ask it something:
 
