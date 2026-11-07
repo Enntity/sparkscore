@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SparkScore · live demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <div class="bg"><div class="grid"></div><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ee8ff"/><stop offset="1" stop-color="#b07bff"/></linearGradient></defs>
+        <path d="M20 2 L24 16 L38 20 L24 24 L20 38 L16 24 L2 20 L16 16 Z" fill="url(#lg)"/>
+      </svg>
+      <span class="name">SparkScore</span>
+      <span class="sep"></span>
+      <span class="scene-title" id="sceneTitle"></span>
+    </div>
+    <div class="chips">
+      <span class="chip">d3-ultra 27B · NVFP4 W4A4</span>
+      <span class="chip">Atlas engine · 1× DGX Spark</span>
+      <span class="chip live" id="live"><i></i>LIVE</span>
+    </div>
+  </header>
+  <main id="scene"></main>
+  <div id="fly"></div>
+  <div class="caption" id="caption"><div class="cap-main"></div><div class="cap-sub"></div></div>
+  <div class="note">Synthetic demo data · fictional companies and people · probabilities and latencies are live</div>
+</div>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

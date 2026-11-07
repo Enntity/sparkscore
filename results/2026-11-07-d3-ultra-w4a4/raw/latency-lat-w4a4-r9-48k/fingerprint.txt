@@ -1,0 +1,6 @@
+commit=6e8c06a44 box=spark-4562 date=2026-11-07T07:59:54Z
+env=ATLAS_SSM_DECODE_RING=0 ATLAS_GDN_BATCHED_FLA=1 ATLAS_SCORE_TRACE=1 -e ATLAS_DENSE_PREFILL_BF16MMA=1 -e ATLAS_GDN_CHUNK_TC=1 -e ATLAS_ATTN_ROWS128=1 -e ATLAS_QWEN38_PDL=1 -e ATLAS_DENSE_PREFILL_LOWP=gu,dn,qkv,o,qkvz,gout
+flags=--kv-cache-dtype bf16 --max-seq-len 49152 --max-prefill-tokens 49152 --max-num-seqs 32 --max-batch-size 32 --gpu-memory-utilization 0.80 --disable-thinking --lm-head-dtype bf16
+harness=--template d3-ultra --temperature choice=1.636,noul=2.366,score=1.588 --model-id sparkscore-d3
+NVIDIA GB10, 580.178.04, 3003 MHz
+note=flags line corrected after the run: the script served with ARENA=49152 but its fingerprint line was hard-coded to 16384

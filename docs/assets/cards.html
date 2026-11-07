@@ -1,0 +1,215 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SparkScore cards in the Enntity arcade style. Rendered by render_cards.py:
+     ?card=social (1280 x 640) or ?card=banner (2172 x 724). Every figure on the
+     cards comes from results/2026-11-07-d3-ultra-w4a4/RESULT.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SparkScore cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=block" rel="stylesheet">
+<style>
+  :root {
+    --bg: #04050d; --ink: #f4f6ff; --dim: #8f9bd0; --cyan: #3ee8ff; --blue: #2f6bff;
+    --pink: #ff4fd8; --violet: #a46bff; --yellow: #ffe23d; --orange: #ff7a1a; --green: #45f59a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); }
+  body { width: var(--w); height: var(--h); overflow: hidden; position: relative; font-family: "Press Start 2P", monospace; color: var(--ink); line-height: 1.25; }
+  #stars { position: absolute; inset: 0; }
+  .frame { position: absolute; inset: 18px; border-radius: 30px; border: 5px solid transparent;
+    background: linear-gradient(var(--bg), var(--bg)) padding-box, linear-gradient(120deg, var(--cyan), var(--violet) 45%, var(--pink)) border-box;
+    box-shadow: 0 0 26px rgba(62, 232, 255, 0.45), inset 0 0 40px rgba(164, 107, 255, 0.18); }
+  .frame-inner { position: absolute; inset: 0; border-radius: 26px; overflow: hidden; }
+  .brand { position: absolute; display: flex; align-items: center; gap: 14px; font-family: "Press Start 2P"; font-weight: 700; letter-spacing: 1px; }
+  .brand svg { display: block; }
+  .title { position: absolute; font-family: "Press Start 2P"; font-weight: 700; line-height: 1; white-space: nowrap; letter-spacing: 0; }
+  .title span { background-clip: text; -webkit-background-clip: text; color: transparent; }
+  .title .a { background-image: linear-gradient(180deg, #fff6a8 0%, var(--yellow) 30%, var(--orange) 72%, #e2341a 100%); }
+  .title .b { background-image: linear-gradient(180deg, #e8fdff 0%, var(--cyan) 35%, var(--blue) 80%, #3a1fd6 100%); }
+  .title-shadow { position: absolute; font-family: "Press Start 2P"; font-weight: 700; line-height: 1; white-space: nowrap; letter-spacing: 1px; color: #2a1470; }
+  .sub { position: absolute; font-weight: 700; letter-spacing: 1px; white-space: nowrap; }
+  .sub i { font-style: normal; color: var(--dim); padding: 0 0.35em; }
+  .stats { position: absolute; display: flex; }
+  .stats.col { flex-direction: column; row-gap: var(--rowgap, 22px); }
+  .stats.col .stat { padding: 0 0 0 26px; border-left: 3px solid rgba(164, 107, 255, 0.75); }
+  .stat { padding: 0 var(--gap, 30px); border-left: 3px solid rgba(164, 107, 255, 0.75); }
+  .stat:first-child { padding-left: 0; border-left: 0; }
+  .stat .k { font-family: "Press Start 2P"; font-weight: 700; color: var(--violet); letter-spacing: 0; white-space: nowrap; }
+  .stat .v { font-family: "Press Start 2P"; font-weight: 700; color: var(--yellow); line-height: 1; white-space: nowrap;
+    text-shadow: 0 0 18px rgba(255, 226, 61, 0.55), 4px 4px 0 #6b3b00; }
+  .stat .v small { font-size: 0.42em; color: var(--violet); text-shadow: none; margin-left: 0.15em; }
+  .stat .n { color: var(--dim); white-space: nowrap; margin-top: 6px; }
+  .feats { position: absolute; display: grid; }
+  .feat { display: flex; align-items: center; gap: 16px; white-space: nowrap; }
+  .feat b { color: var(--cyan); font-weight: 700; }
+  .ico { flex: none; border: 3px solid var(--violet); border-radius: 6px; display: grid; place-items: center; color: var(--yellow);
+    font-family: "Press Start 2P"; font-weight: 700; box-shadow: 0 0 10px rgba(164, 107, 255, 0.5); }
+  .gh { position: absolute; display: flex; align-items: center; gap: 14px; font-weight: 700; color: var(--violet); white-space: nowrap;
+    text-shadow: 0 0 14px rgba(164, 107, 255, 0.55); }
+  .foot { position: absolute; color: #5d6896; white-space: nowrap; }
+  #viz { position: absolute; }
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="frame"><div class="frame-inner"></div></div>
+<div class="brand" id="brand"></div>
+<div class="title-shadow" id="tshadow">SparkScore</div>
+<div class="title" id="title"><span class="a">Spark</span><span class="b">Score</span></div>
+<div class="sub" id="sub">d3-ultra 27B<i>·</i>NVFP4 W4A4<i>·</i>One DGX Spark</div>
+<div class="stats" id="stats">
+  <div class="stat"><div class="k">JevBench public</div><div class="v">90.9<small>%</small></div><div class="n">231 items</div></div>
+  <div class="stat"><div class="k">p50 latency</div><div class="v">146<small>ms</small></div><div class="n">per question</div></div>
+  <div class="stat"><div class="k">vs d3's runtime</div><div class="v">4.3<small>×</small></div><div class="n">faster, same Spark</div></div>
+</div>
+<div class="feats" id="feats">
+  <div class="feat"><div class="ico">?</div><span>Typed questions in, <b>calibrated probabilities</b> out</span></div>
+  <div class="feat"><div class="ico">1</div><span>Every question in <b>one engine pass</b>, nothing generated</span></div>
+  <div class="feat"><div class="ico">⌂</div><span>Runs locally on Atlas: <b>the data stays on the box</b></span></div>
+</div>
+<svg id="viz"></svg>
+<div class="gh" id="gh"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>github.com/Enntity/sparkscore</span></div>
+<div class="foot" id="foot">JevBench v1.6.1 public items · W4A4 default · results/2026-11-07-d3-ultra-w4a4</div>
+<script>
+const P = new URLSearchParams(location.search);
+const CARD = P.get("card") || "social";
+
+// Layout per card, in pixels. One place to tune each format.
+const L = {
+  social: { w: 1280, h: 640,
+    brand: [58, 52, 20], title: [58, 112, 76], sub: [62, 226, 17],
+    stats: [62, 288, 13, 50, 12], statsCol: false, gap: 24, feats: [62, 470, 14, 42, 30],
+    viz: [892, 60, 330, 410], gh: [836, 570, 12, 24], foot: null },
+  banner: { w: 2172, h: 724,
+    brand: [82, 62, 26], title: [80, 150, 96], sub: [86, 306, 23],
+    stats: [1130, 84, 17, 66, 15], statsCol: true, rowgap: 44, feats: [86, 400, 18, 60, 40],
+    viz: [1718, 78, 380, 470], gh: [1466, 626, 19, 32], foot: [86, 646, 12] },
+}[CARD];
+document.body.style.setProperty("--w", `${L.w}px`);
+document.body.style.setProperty("--h", `${L.h}px`);
+
+const at = (id, x, y) => Object.assign(document.getElementById(id).style, { left: `${x}px`, top: `${y}px` });
+
+// Enntity mark (the head-in-a-ring glyph), drawn to match the sibling cards.
+const brand = document.getElementById("brand");
+const bs = L.brand[2];
+brand.innerHTML = `<svg width="${bs * 1.2}" height="${bs * 1.2}" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="5">
+  <circle cx="24" cy="24" r="20"/><circle cx="24" cy="19" r="7"/><path d="M10.5 38.5c3-6.5 8-9.5 13.5-9.5s10.5 3 13.5 9.5"/></svg><span style="font-size:${bs}px">ENNTITY</span>`;
+at("brand", L.brand[0], L.brand[1]);
+
+const title = document.getElementById("title"), ts = document.getElementById("tshadow");
+title.style.fontSize = ts.style.fontSize = `${L.title[2]}px`;
+at("title", L.title[0], L.title[1]);
+at("tshadow", L.title[0] + L.title[2] * 0.055, L.title[1] + L.title[2] * 0.075);
+title.style.filter = "drop-shadow(0 0 18px rgba(255, 122, 26, 0.35))";
+
+document.getElementById("sub").style.fontSize = `${L.sub[2]}px`;
+at("sub", L.sub[0], L.sub[1]);
+
+const st = document.getElementById("stats");
+at("stats", L.stats[0], L.stats[1]);
+if (L.statsCol) { st.classList.add("col"); st.style.setProperty("--rowgap", `${L.rowgap}px`); }
+if (L.gap) st.style.setProperty("--gap", `${L.gap}px`);
+st.querySelectorAll(".k").forEach((e) => (e.style.fontSize = `${L.stats[2]}px`));
+st.querySelectorAll(".v").forEach((e) => { e.style.fontSize = `${L.stats[3]}px`; e.style.marginTop = `${L.stats[3] * 0.16}px`; });
+st.querySelectorAll(".n").forEach((e) => (e.style.fontSize = `${L.stats[4]}px`));
+
+const fe = document.getElementById("feats");
+at("feats", L.feats[0], L.feats[1]);
+fe.style.fontSize = `${L.feats[2]}px`;
+fe.style.rowGap = `${L.feats[3] - L.feats[4]}px`;
+fe.querySelectorAll(".ico").forEach((e) => { e.style.width = e.style.height = `${L.feats[4]}px`; e.style.fontSize = `${L.feats[4] * 0.5}px`; });
+
+const gh = document.getElementById("gh");
+at("gh", L.gh[0], L.gh[1]);
+gh.style.fontSize = `${L.gh[2]}px`;
+gh.querySelector("svg").setAttribute("width", L.gh[3]);
+gh.querySelector("svg").setAttribute("height", L.gh[3]);
+
+const foot = document.getElementById("foot");
+if (L.foot) { at("foot", L.foot[0], L.foot[1]); foot.style.fontSize = `${L.foot[2]}px`; } else foot.remove();
+
+// Starfield: seeded, so a re-render is identical.
+let seed = 7;
+const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const cv = document.getElementById("stars");
+cv.width = L.w; cv.height = L.h;
+const g = cv.getContext("2d");
+for (let i = 0; i < L.w * L.h / 5200; i++) {
+  const x = rnd() * L.w, y = rnd() * L.h, r = rnd();
+  g.fillStyle = r > 0.93 ? "#ffe23d" : r > 0.88 ? "#3ee8ff" : r > 0.85 ? "#ff4fd8" : `rgba(255,255,255,${0.35 + rnd() * 0.6})`;
+  const s = r > 0.85 ? 4 : r > 0.6 ? 3 : 2;
+  g.fillRect(Math.round(x), Math.round(y), s, s);
+}
+
+// The visual: a neon wireframe tunnel with a decision inside it. Each ring is
+// a "noul" gauge; the near one reads 0.97 YES, the deep ones fade in perspective.
+const [vx, vy, vw, vh] = L.viz;
+const svg = document.getElementById("viz");
+Object.assign(svg.style, { left: `${vx}px`, top: `${vy}px` });
+svg.setAttribute("width", vw); svg.setAttribute("height", vh);
+svg.setAttribute("viewBox", `0 0 ${vw} ${vh}`);
+const NS = "http://www.w3.org/2000/svg";
+const add = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.append(e); return e; };
+const defs = add("defs", {});
+const glow = add("filter", { id: "glow", x: "-30%", y: "-30%", width: "160%", height: "160%" }, defs);
+add("feGaussianBlur", { stdDeviation: 3.2, result: "b" }, glow);
+const fm = add("feMerge", {}, glow); add("feMergeNode", { in: "b" }, fm); add("feMergeNode", { in: "SourceGraphic" }, fm);
+const cx = vw / 2, cy = vh * 0.46;
+const depth = 9;
+const rect = (k) => { const s = Math.pow(0.72, k); return [cx - (vw / 2 - 6) * s, cy - (vh * 0.46 - 6) * s, (vw - 12) * s, (vh * 0.92 - 12) * s]; };
+const wire = add("g", { filter: "url(#glow)", fill: "none", "stroke-linejoin": "round" });
+for (let k = 0; k < depth; k++) {
+  const [x, y, w, h] = rect(k);
+  add("rect", { x, y, width: w, height: h, rx: 4 * Math.pow(0.72, k), stroke: k < 3 ? "#d9f7ff" : "#3ee8ff", "stroke-width": 2.6 * Math.pow(0.85, k), opacity: 1 - k * 0.07 }, wire);
+}
+const [x0, y0, w0, h0] = rect(0), [x1, y1, w1, h1] = rect(depth - 1);
+for (let i = 0; i <= 4; i++) {
+  const t = i / 4;
+  for (const [a, b] of [[[x0 + w0 * t, y0], [x1 + w1 * t, y1]], [[x0 + w0 * t, y0 + h0], [x1 + w1 * t, y1 + h1]], [[x0, y0 + h0 * t], [x1, y1 + h1 * t]], [[x0 + w0, y0 + h0 * t], [x1 + w1, y1 + h1 * t]]])
+    add("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: "#a46bff", "stroke-width": 1.6, opacity: 0.75 }, wire);
+}
+// Gauges floating down the tunnel.
+const gauges = [
+  { k: 0.9, p: 0.97, c: "#45f59a", label: "YES", dx: 0.04, dy: 0.06 },
+  { k: 1.7, p: 0.12, c: "#ff4fd8", label: "NO", dx: -0.34, dy: 0.34 },
+  { k: 2.3, p: 0.64, c: "#ffe23d", label: "", dx: 0.42, dy: -0.4 },
+  { k: 3.1, p: 0.31, c: "#3ee8ff", label: "", dx: -0.5, dy: -0.5 },
+];
+for (const q of gauges.slice().reverse()) {
+  const s = Math.pow(0.72, q.k), r = vw * 0.24 * s;
+  const gx = cx + q.dx * vw * s * 1.4, gy = cy + q.dy * vh * s * 1.4;
+  const gg = add("g", { filter: "url(#glow)", opacity: Math.min(1, 1.15 - q.k * 0.12) });
+  add("circle", { cx: gx, cy: gy, r: r * 1.18, fill: "#04050d", stroke: "none" }, gg);
+  add("circle", { cx: gx, cy: gy, r, fill: "none", stroke: "#26305e", "stroke-width": r * 0.2 }, gg);
+  const C = 2 * Math.PI * r;
+  add("circle", { cx: gx, cy: gy, r, fill: "none", stroke: q.c, "stroke-width": r * 0.2, "stroke-linecap": "round",
+    "stroke-dasharray": `${C * q.p} ${C}`, transform: `rotate(-90 ${gx} ${gy})` }, gg);
+  const t = add("text", { x: gx, y: gy + r * 0.16, "text-anchor": "middle", fill: "#f4f6ff", "font-family": "Press Start 2P", "font-weight": 700, "font-size": r * 0.4 }, gg);
+  t.textContent = q.p.toFixed(2);
+  if (q.label) {
+    const l = add("text", { x: gx, y: gy + r * 0.62, "text-anchor": "middle", fill: q.c, "font-family": "Press Start 2P", "font-weight": 700, "font-size": r * 0.22 }, gg);
+    l.textContent = q.label;
+  }
+}
+document.fonts.ready.then(() => {
+  const ids = ["brand", "title", "sub", "stats", "feats", "viz", "gh", "foot"].filter((i) => document.getElementById(i));
+  const box = (i) => document.getElementById(i).getBoundingClientRect();
+  const inner = { left: 30, top: 30, right: L.w - 30, bottom: L.h - 30 };
+  const bad = [];
+  for (const i of ids) {
+    const r = box(i);
+    if (r.left < inner.left || r.top < inner.top || r.right > inner.right || r.bottom > inner.bottom) bad.push(`${i} outside frame`);
+  }
+  for (let a = 0; a < ids.length; a++) for (let b = a + 1; b < ids.length; b++) {
+    const p = box(ids[a]), q = box(ids[b]);
+    if (p.left < q.right - 2 && q.left < p.right - 2 && p.top < q.bottom - 2 && q.top < p.bottom - 2) bad.push(`${ids[a]} overlaps ${ids[b]}`);
+  }
+  document.body.dataset.problems = bad.join("; ");
+  document.body.dataset.ready = "1";
+});
+</script>
+</body>
+</html>

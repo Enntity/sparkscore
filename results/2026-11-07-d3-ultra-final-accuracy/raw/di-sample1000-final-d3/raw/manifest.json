@@ -1,0 +1,62 @@
+{
+  "harness": "decision-index",
+  "harness_commit": "25c6ec7b6b5f44a216c63c3a700de3a9c6d6699d",
+  "harness_dirty": false,
+  "endpoint": "http://127.0.0.1:8015",
+  "model": "sparkscore-d3",
+  "endpoint_info": {
+    "/v1/models": {
+      "models": [
+        {
+          "name": "sparkscore-d3",
+          "description": "SparkScore: local:d3-ultra-NVFP4 with prompt template d3-ultra on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "sparkscore-latest",
+          "description": "SparkScore: local:d3-ultra-NVFP4 with prompt template d3-ultra on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "jev-latest",
+          "description": "SparkScore: local:d3-ultra-NVFP4 with prompt template d3-ultra on the Atlas score backend",
+          "release_date": "2026-11-05"
+        }
+      ]
+    },
+    "/v1/limits": {
+      "max_choice_options": 255,
+      "max_score_levels": 10,
+      "max_body_bytes": 33554432,
+      "per_question_context": 32768,
+      "per_request_context": 65536,
+      "max_concurrent_requests": 16
+    }
+  },
+  "sparkscore_commit": null,
+  "host_python": "3.12.3",
+  "started_utc": "2026-11-06T23:34:34.593675+00:00",
+  "commands": [
+    {
+      "argv": [
+        "../decision-index/.venv/bin/python",
+        "-m",
+        "decision_index",
+        "pipeline",
+        "--engine",
+        "http",
+        "--option",
+        "base_url=http://127.0.0.1:8015",
+        "--option",
+        "model=sparkscore-d3",
+        "--rows",
+        "/home/user/sparkscore/decision-index/sample-1000.jsonl.gz",
+        "--out",
+        "/home/user/sparkscore/results/di-sample1000-final-d3/raw/run"
+      ],
+      "exit": 0,
+      "seconds": 2312.7
+    }
+  ],
+  "finished_utc": "2026-11-07T00:13:07.310640+00:00"
+}

@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# The SparkScore server: tokenizer and chat template only (no torch).
+# jinja2 is what transformers renders chat templates with.
+transformers>=5.22,<6  # tested: 5.22.1
+tokenizers>=0.23,<1   # tested: 0.23.3
+jinja2>=3.1,<4

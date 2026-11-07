@@ -1,0 +1,45 @@
+{
+  "schema": "sparkscore.checkpoints/v1",
+  "default": "d3-ultra-nvfp4",
+  "checkpoints": {
+    "knowline-35b-a3b-gen1.5-nvfp4": {
+      "source": "PelaAI/KnowLine-35B-A3B-Gen1.5",
+      "source_revision": "9adcf717361b2f7d2946d093f1e85efdf1e59010",
+      "source_license": "Apache-2.0",
+      "format_reference": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "built_with": "tools/nvfp4_convert.py convert --keep-bf16 lm_head",
+      "notes": "NVIDIA's MIXED_PRECISION recipe (experts and shared experts NVFP4 W4A16, attention and GDN projections FP8); lm_head kept BF16 for the score head's FP32 option logits; input_scale copied from the reference. Template: knowline-gen1.5. Serve with --lm-head-dtype bf16."
+    },
+    "qwen3.6-35b-a3b-nvfp4": {
+      "source": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "source_license": "Apache-2.0",
+      "notes": "Zero-shot baseline. Template: chat-v1."
+    },
+    "d3-ultra-nvfp4": {
+      "source": "vllm-sr/d3-ultra",
+      "source_revision": "ccdcfa611649a59e095e0b5e1732a15cedafadd6",
+      "source_license": "Apache-2.0",
+      "format_reference": "a2genesis/Qwen3.8-27B-NVFP4 (ModelOpt MIXED_PRECISION: MLP NVFP4 W4A16, attention/GDN projections FP8)",
+      "format_reference_revision": "bfd9b31207712e0850eec9da32261e8c5ee16af7",
+      "built_with": "install/convert.sh (tools/nvfp4_convert.py convert --src d3-ultra --ref Qwen3.8-27B-NVFP4 --readout d3-ultra --drop-mtp)",
+      "notes": "Qwen3.8-27B decision model. lm_head synthesized as BF16: d3's FP32 readout rows (cast to BF16) at the code token ids, zeros elsewhere; serve with --lm-head-dtype bf16. Needs Atlas prefix_bidir (/v1/score \"attention\": \"prefix_bidir\"); template d3-ultra. FP8 input_scale copied from the reference (calibrated on base Qwen3.8).",
+      "serve": {
+        "engine": "install/atlas-source.json",
+        "atlas_target": "gb10 / qwen3.8-27b / nvfp4",
+        "atlas_env": {
+          "ATLAS_SSM_DECODE_RING": "0",
+          "ATLAS_GDN_BATCHED_FLA": "1",
+          "ATLAS_DENSE_PREFILL_BF16MMA": "1",
+          "ATLAS_GDN_CHUNK_TC": "1",
+          "ATLAS_ATTN_ROWS128": "1",
+          "ATLAS_QWEN38_PDL": "1",
+          "ATLAS_DENSE_PREFILL_LOWP": "gu,dn,qkv,o,qkvz,gout"
+        },
+        "lowp_note": "W4A4 (NVFP4 weights x NVFP4 tokens) for the MLP and attention, W8A8 for the GDN projections. ./start.sh --precision w4a8 (LOWP=1) is the W4A8 alternative (results/2026-11-07-d3-ultra-w4a4)",
+        "atlas_flags": "--kv-cache-dtype bf16 --max-seq-len 49152 --max-prefill-tokens 49152 --max-num-seqs 32 --max-batch-size 32 --gpu-memory-utilization 0.80 --disable-thinking --lm-head-dtype bf16",
+        "harness_args": "--template d3-ultra --temperature choice=1.636,noul=2.366,score=1.588 --model-id sparkscore-d3",
+        "temperature_fit": "tools.sparkscore.calibrate fitted on kev decision-v4 (clean rows) only, on the W4A8 build; the reported kev suites and JevBench are held out, and the W4A4 build keeps them (kev transfer-v4 NLL 0.334 on both)"
+      }
+    }
+  }
+}

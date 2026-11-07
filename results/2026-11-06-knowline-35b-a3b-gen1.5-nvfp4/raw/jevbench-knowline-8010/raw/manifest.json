@@ -1,0 +1,94 @@
+{
+  "harness": "jevbench",
+  "harness_commit": "609a664e81f46e03731600bd7bd9f1b7a61257c5",
+  "harness_dirty": false,
+  "endpoint": "http://127.0.0.1:8010",
+  "model": "sparkscore-knowline",
+  "endpoint_info": {
+    "/v1/models": {
+      "models": [
+        {
+          "name": "sparkscore-knowline",
+          "description": "SparkScore: local:KnowLine-35B-A3B-Gen1.5-NVFP4 with prompt template knowline-gen1.5 on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "sparkscore-latest",
+          "description": "SparkScore: local:KnowLine-35B-A3B-Gen1.5-NVFP4 with prompt template knowline-gen1.5 on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "jev-latest",
+          "description": "SparkScore: local:KnowLine-35B-A3B-Gen1.5-NVFP4 with prompt template knowline-gen1.5 on the Atlas score backend",
+          "release_date": "2026-11-05"
+        }
+      ]
+    },
+    "/v1/limits": {
+      "max_choice_options": 255,
+      "max_score_levels": 10,
+      "max_body_bytes": 33554432,
+      "per_question_context": 32768,
+      "per_request_context": 65536,
+      "max_concurrent_requests": 16
+    }
+  },
+  "sparkscore_commit": null,
+  "host_python": "3.12.3",
+  "started_utc": "2026-11-06T08:04:22.755760+00:00",
+  "commands": [
+    {
+      "argv": [
+        "/home/user/sparkscore/repo/.venv/bin/python",
+        "-m",
+        "jevbench.cli",
+        "run",
+        "--tasks",
+        "datasets/public/easy.jsonl,datasets/public/hard.jsonl,datasets/public/original.jsonl",
+        "--adapter",
+        "typesafe",
+        "--endpoint",
+        "http://127.0.0.1:8010",
+        "--model",
+        "sparkscore-knowline",
+        "--key-env",
+        "",
+        "--results",
+        "/home/user/sparkscore/results/jevbench-knowline-8010/raw/results.jsonl",
+        "--ledger",
+        "/home/user/sparkscore/results/jevbench-knowline-8010/raw/ledger.jsonl",
+        "--raw-dir",
+        "/home/user/sparkscore/results/jevbench-knowline-8010/raw/responses",
+        "--price-in-per-m",
+        "0",
+        "--price-out-per-m",
+        "0",
+        "--cost-basis",
+        "local_spark_compute_excluded",
+        "--run-label",
+        "sparkscore-knowline",
+        "--manifest",
+        "/home/user/sparkscore/results/jevbench-knowline-8010/raw/run-manifest.json"
+      ],
+      "exit": 0,
+      "seconds": 87.9
+    },
+    {
+      "argv": [
+        "/home/user/sparkscore/repo/.venv/bin/python",
+        "-m",
+        "jevbench.cli",
+        "summarize",
+        "--tasks",
+        "datasets/public/easy.jsonl,datasets/public/hard.jsonl,datasets/public/original.jsonl",
+        "--results",
+        "/home/user/sparkscore/results/jevbench-knowline-8010/raw/results.jsonl",
+        "--public-export",
+        "/home/user/sparkscore/results/jevbench-knowline-8010/raw/public-export.json"
+      ],
+      "exit": 0,
+      "seconds": 0.1
+    }
+  ],
+  "finished_utc": "2026-11-06T08:05:50.730218+00:00"
+}

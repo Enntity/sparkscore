@@ -1,0 +1,4 @@
+sparkscore  Up 56 seconds (health: starting)  sparkscore:28d408ac5cbc
+engine: https://github.com/Enntity/atlas.git upstream/systemone-score-20261105 b594151da3a4884691d532806276d28522c8b438
+precision: w4a4
+{"max_questions": 256, "max_choice_options": 255, "max_score_levels": 10, "max_body_bytes": 33554432, "per_question_context": 32768, "per_request_context": 65536, "max_concurrent_requests": 16}

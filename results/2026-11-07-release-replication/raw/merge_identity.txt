@@ -1,0 +1,7 @@
+merge identity: 60 results, 51 merged, worst |dp| vs solo 0.000e+00
+bad token id: 400
+prefix token past vocab: 400
+too many branches: 400
+branch too long for a pass: 422
+unknown attention: 400
+burst of 80: {200: 65, 503: 15}

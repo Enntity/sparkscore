@@ -1,0 +1,83 @@
+evaluated 50/1264
+evaluated 100/1264
+evaluated 150/1264
+evaluated 200/1264
+evaluated 250/1264
+evaluated 300/1264
+evaluated 350/1264
+evaluated 400/1264
+evaluated 450/1264
+evaluated 500/1264
+evaluated 550/1264
+evaluated 600/1264
+evaluated 650/1264
+evaluated 700/1264
+evaluated 750/1264
+evaluated 800/1264
+evaluated 850/1264
+evaluated 900/1264
+evaluated 950/1264
+evaluated 1000/1264
+evaluated 1050/1264
+evaluated 1100/1264
+evaluated 1150/1264
+evaluated 1200/1264
+evaluated 1250/1264
+{
+  "objective": -0.30272305968971974,
+  "clean": {
+    "n": 1046,
+    "nll": 0.4576090603195083,
+    "acc": 0.8393881453154876,
+    "ece": 0.029925494203297858,
+    "brier": 0.23315498582595248,
+    "mean_conf": 0.8507782486858132,
+    "confident_error_rate": 0.022944550669216062,
+    "coverage_at_0_9": 0.5927342256214149,
+    "accuracy_at_0_9": 0.9612903225806452,
+    "coverage_at_5pct_error": 0.6615678776290631,
+    "coverage_at_1pct_error": 0.2954110898661568,
+    "aurc": 0.04279541670697179,
+    "error_rate_at_0_9": 0.03870967741935484,
+    "confidence_bias": 0.011390103370325644,
+    "top_bins": {
+      "0.9": {
+        "n": 620,
+        "errors": 24,
+        "error_rate": 0.03870967741935484
+      },
+      "0.95": {
+        "n": 524,
+        "errors": 16,
+        "error_rate": 0.030534351145038167
+      },
+      "0.99": {
+        "n": 342,
+        "errors": 4,
+        "error_rate": 0.011695906432748537
+      }
+    },
+    "selective": {
+      "0.5": {
+        "coverage": 0.5,
+        "accuracy": 0.9694072657743786,
+        "confidence_cutoff": 0.9506247012250851
+      },
+      "0.8": {
+        "coverage": 0.8011472275334608,
+        "accuracy": 0.9164677804295943,
+        "confidence_cutoff": 0.7057850216484838
+      }
+    },
+    "score_mae": 0.09505113300219209,
+    "ranked_probability_score": 0.0186809965044623
+  },
+  "coverage": {
+    "requested_records": 1264,
+    "requested_questions": 1264,
+    "evaluated_records": 1264,
+    "evaluated_questions": 1264,
+    "rejected_records": 0,
+    "truncated_records": 0
+  }
+}

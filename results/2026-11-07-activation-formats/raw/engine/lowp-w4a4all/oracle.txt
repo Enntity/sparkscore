@@ -1,0 +1,2 @@
+prefix_bidir: n=49 agree 47/49 mean|dp| 0.0233 max|dp| 0.4719 (smoke/date/overdue_mar_20) meanKL 0.01475
+      causal: n=49 agree 46/49 mean|dp| 0.0415 max|dp| 0.5703 (jev/hard-opus-c-temporal_numeric-06/decision) meanKL 0.04743

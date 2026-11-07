@@ -1,0 +1,15 @@
+{
+  "schema": "sparkscore.atlas-engine-source/v1",
+  "note": "The score path and dense 27B prefill kernels, on Atlas-Inf main 999bfc48d; proposed upstream as Atlas-Inf/atlas#331. Once it merges: install/repin.sh <merge commit>.",
+  "repository": "https://github.com/Enntity/atlas.git",
+  "branch": "upstream/systemone-score-20261105",
+  "commit": "b594151da3a4884691d532806276d28522c8b438",
+  "tree": "f48d7947146c05f4df27498ca127e3f86f91f96b",
+  "upstream_pr": "https://github.com/Atlas-Inf/atlas/pull/331",
+  "target": {
+    "hw": "gb10",
+    "model": "qwen3.8-27b",
+    "quant": "nvfp4"
+  },
+  "license": "AGPL-3.0-only"
+}

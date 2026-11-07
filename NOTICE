@@ -1,0 +1,50 @@
+SparkScore
+Copyright 2026 the SparkScore contributors
+Licensed under AGPL-3.0-only (LICENSE).
+
+The Atlas engine is built from Enntity/atlas at the commit in
+install/atlas-source.json (AGPL-3.0-only).
+
+The request and response shape follows TypeSafe AI's published System One API
+(docs.typesafe.ai). SparkScore is not affiliated with TypeSafe AI. "Jev" is
+TypeSafe AI's name for its model and is used here only to describe the API
+shape and to compare results.
+
+Model weights are not distributed here. Each checkpoint named in
+install/checkpoints.json carries its authors' license.
+
+tools/sparkscore reimplements, without copying code:
+- the answer fields and confidence formulas of TypeSafe AI's
+  system-one-adapter-python 0.2.1 (MIT);
+- prompt-layout and label ideas from openjev-sglang (ekzhang), KnowLine
+  (PelaAI, Apache-2.0), decider (Mapika, Apache-2.0) and SGLang's
+  /v1/systemone (Apache-2.0), as credited in tools/sparkscore/templates/.
+tools/sparkscore/templates/knowline_gen15.py is adapted from
+knowline_layout.py and knowline_server.py of PelaAI/KnowLine-35B-A3B-Gen1.5
+(huggingface.co/PelaAI/KnowLine-35B-A3B-Gen1.5, revision 9adcf717; the
+repository is Apache-2.0; knowline_server.py says "Licence of this file:
+MIT"). They credit llm2jev 0.6.1 (MIT, Copyright (c) 2026 AnyJev contributors) for
+the rendering and scoring code, OpenJev for the layout module, and FlexDM
+(MIT) and RE2 (Xu et al., 2023) for the read-twice layout. Its tests compare
+against those files, which are not included here.
+tools/sparkscore/templates/d3_ultra.py is adapted from d3_format.py and
+d3_runtime.py of vllm-sr/d3-ultra (Decision 3.0, Copyright 2026 vLLM Semantic
+Router Team, Apache-2.0; huggingface.co/vllm-sr/d3-ultra, revision
+ccdcfa61). Its tests compare against those files, which are not included
+here.
+
+The benchmark runners call Decision Index (MIT), JevBench (MIT) and kev
+(Apache-2.0) from their own checkouts; none of their code is included here.
+tools/sparkscore/bench/data/d3-bf16-reference.jsonl contains the text of
+JevBench public items (MIT, Copyright (c) the JevBench authors,
+github.com/fstandhartinger/jevbench) as rendered by d3-ultra's runtime, with
+d3-ultra's answers to them.
+
+The demo pages (demo/) and the cards (docs/assets/cards.html) load Inter,
+JetBrains Mono, Space Grotesk and Press Start 2P from Google Fonts (SIL Open
+Font License 1.1); no font files are included.
+
+tools/nvfp4_convert.py reproduces NVIDIA TensorRT Model Optimizer's (ModelOpt,
+Apache-2.0) NVFP4 and FP8 weight quantization ("max" calibration) bit for bit,
+written independently against nvidia/Qwen3.6-35B-A3B-NVFP4 as the format
+reference. No ModelOpt code is included.

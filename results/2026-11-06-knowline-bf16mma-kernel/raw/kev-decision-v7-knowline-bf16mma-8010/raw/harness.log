@@ -1,0 +1,82 @@
+evaluated 50/1204
+evaluated 100/1204
+evaluated 150/1204
+evaluated 200/1204
+evaluated 250/1204
+evaluated 300/1204
+evaluated 350/1204
+evaluated 400/1204
+evaluated 450/1204
+evaluated 500/1204
+evaluated 550/1204
+evaluated 600/1204
+evaluated 650/1204
+evaluated 700/1204
+evaluated 750/1204
+evaluated 800/1204
+evaluated 850/1204
+evaluated 900/1204
+evaluated 950/1204
+evaluated 1000/1204
+evaluated 1050/1204
+evaluated 1100/1204
+evaluated 1150/1204
+evaluated 1200/1204
+{
+  "objective": -0.23089398894743327,
+  "clean": {
+    "n": 1264,
+    "nll": 0.3390754963487304,
+    "acc": 0.875,
+    "ece": 0.024645228120501732,
+    "brier": 0.17966969499960786,
+    "mean_conf": 0.8746816934572282,
+    "confident_error_rate": 0.01661392405063291,
+    "coverage_at_0_9": 0.6534810126582279,
+    "accuracy_at_0_9": 0.9745762711864406,
+    "coverage_at_5pct_error": 0.7800632911392406,
+    "coverage_at_1pct_error": 0.1906645569620253,
+    "aurc": 0.03016001543097324,
+    "error_rate_at_0_9": 0.025423728813559324,
+    "confidence_bias": -0.0003183065427717624,
+    "top_bins": {
+      "0.9": {
+        "n": 826,
+        "errors": 21,
+        "error_rate": 0.025423728813559324
+      },
+      "0.95": {
+        "n": 738,
+        "errors": 14,
+        "error_rate": 0.018970189701897018
+      },
+      "0.99": {
+        "n": 500,
+        "errors": 7,
+        "error_rate": 0.014
+      }
+    },
+    "selective": {
+      "0.5": {
+        "coverage": 0.5,
+        "accuracy": 0.9825949367088608,
+        "confidence_cutoff": 0.9755223843916419
+      },
+      "0.8": {
+        "coverage": 0.8006329113924051,
+        "accuracy": 0.9456521739130435,
+        "confidence_cutoff": 0.7030459210913776
+      }
+    },
+    "score_mae": 0.4531912952004626,
+    "ranked_probability_score": 0.0665254603251121
+  },
+  "coverage": {
+    "requested_records": 1204,
+    "requested_questions": 1468,
+    "evaluated_records": 1204,
+    "evaluated_questions": 1468,
+    "rejected_records": 0,
+    "truncated_records": 0
+  }
+}

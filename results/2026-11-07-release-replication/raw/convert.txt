@@ -1,0 +1,60 @@
+=============
+== PyTorch ==
+=============
+NVIDIA Release 25.10 (build 222058775)
+PyTorch Version 2.9.0a0+145a3a7
+Container image Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+Copyright (c) 2014-2024 Facebook Inc.
+Copyright (c) 2011-2014 Idiap Research Institute (Ronan Collobert)
+Copyright (c) 2012-2014 Deepmind Technologies    (Koray Kavukcuoglu)
+Copyright (c) 2011-2012 NEC Laboratories America (Koray Kavukcuoglu)
+Copyright (c) 2011-2013 NYU                      (Clement Farabet)
+Copyright (c) 2006-2010 NEC Laboratories America (Ronan Collobert, Leon Bottou, Iain Melvin, Jason Weston)
+Copyright (c) 2006      Idiap Research Institute (Samy Bengio)
+Copyright (c) 2001-2004 Idiap Research Institute (Ronan Collobert, Samy Bengio, Johnny Mariethoz)
+Copyright (c) 2015      Google Inc.
+Copyright (c) 2015      Yangqing Jia
+Copyright (c) 2013-2016 The Caffe contributors
+All rights reserved.
+Various files include modifications (c) NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+GOVERNING TERMS: The software and materials are governed by the NVIDIA Software License Agreement
+(found at https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/)
+and the Product-Specific Terms for NVIDIA AI Products
+(found at https://www.nvidia.com/en-us/agreements/enterprise-software/product-specific-terms-for-ai-products/).
+/etc/bash.bashrc: line 9: PS1: unbound variable
+WARNING: huggingface-hub 1.33.0 does not provide the extra 'cli'
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+To update, run: hf update[0m
+[32m✓ Downloaded[0m
+  path: /work/src/d3-ultra
+[32m✓ Downloaded[0m
+  path: /work/src/Qwen3.8-27B-NVFP4
+lm_head from readout: max |cast error| 2.418e-04, max relative 3.891e-03
+model-00001-of-00003.safetensors: 970 tensors, 177s
+model-00002-of-00003.safetensors: 976 tensors, 386s
+model-00003-of-00003.safetensors: 38 tensors, 397s
+done: 22.90 GB, 18800348400 params, 397s
+dtype/shape differs: 1  e.g. ["lm_head.weight: ref ('U8', (248320, 2560)) out ('BF16', (248320, 5120))"]
+only in ref: 17  e.g. ['lm_head.weight_scale', 'lm_head.weight_scale_2', 'mtp.fc.weight', 'mtp.layers.0.input_layernorm.weight']
+quantized modules: 400 (reference 401), same algorithm 400
+input_scale tensors identical to the reference: 208/208
+out FP8: max scale/code == 448 in 208/208 modules (min 448, max 448)
+out W4A16_NVFP4: max scale/code == 448 in 129/192 modules (min 176, max 448)
+ref FP8: max scale/code == 448 in 208/208 modules (min 448, max 448)
+ref W4A16_NVFP4: max scale/code == 448 in 129/192 modules (min 176, max 448)
+out: gate/up share weight_scale_2 in 64/64 MLPs
+ref: gate/up share weight_scale_2 in 64/64 MLPs
+relative Frobenius error, FP8: mean 2.6662e-02, max 2.6925e-02 over 19 modules
+relative Frobenius error, FP8, reference vs source: mean 2.7996e-02, max 2.8741e-02 over 19 modules
+relative Frobenius error, FP8, out vs reference: mean 2.0200e-02, max 2.3662e-02 over 19 modules
+relative Frobenius error, W4A16_NVFP4: mean 9.4964e-02, max 9.5119e-02 over 21 modules
+relative Frobenius error, W4A16_NVFP4, reference vs source: mean 9.5656e-02, max 9.6033e-02 over 21 modules
+relative Frobenius error, W4A16_NVFP4, out vs reference: mean 5.5543e-02, max 6.1289e-02 over 21 modules
+unquantized tensors identical to the source: 783/783
+lm_head: equals the readout cast (rows at token_ids, zeros elsewhere): True; cast max abs 2.418e-04, max rel 3.891e-03
+VALID
+checking /home/user/sparkscore/release-models/d3-ultra-NVFP4 against install/d3-ultra-nvfp4.sha256
+checksums match the reference build
+real	15m11.357s
+user	0m9.375s
+sys	0m1.290s

@@ -1,0 +1,5 @@
+commit=8434214d8 box=spark-4562 date=2026-11-07T02:44:48Z
+env=ATLAS_SSM_DECODE_RING=0 ATLAS_GDN_BATCHED_FLA=1 ATLAS_SCORE_TRACE=1 -e ATLAS_DENSE_PREFILL_BF16MMA=1 -e ATLAS_GDN_CHUNK_TC=1 -e ATLAS_ATTN_ROWS128=1 -e ATLAS_QWEN38_PDL=1 -e ATLAS_DENSE_PREFILL_LOWP=1
+flags=--kv-cache-dtype bf16 --max-seq-len 16384 --max-prefill-tokens 16384 --max-num-seqs 32 --max-batch-size 32 --gpu-memory-utilization 0.80 --disable-thinking --lm-head-dtype bf16
+harness=--template d3-ultra --temperature choice=1.636,noul=2.366,score=1.588 --model-id sparkscore-d3
+NVIDIA GB10, 580.178.04, 3003 MHz

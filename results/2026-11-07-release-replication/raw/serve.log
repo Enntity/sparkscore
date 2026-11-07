@@ -1,0 +1,3 @@
+[1m== serving sparkscore:28d408ac5cbc on 127.0.0.1:8015[0m
+[1m== waiting for the model to load (about a minute)[0m
+[1m== ready: http://127.0.0.1:8015/v1/systemone[0m

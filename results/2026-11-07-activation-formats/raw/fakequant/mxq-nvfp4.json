@@ -1,0 +1,455 @@
+{
+ "summary": {
+  "variant": "nvfp4",
+  "n": 72,
+  "mean_kl": 0.009427534986386798,
+  "median_kl": 2.1499057505596193e-06,
+  "max_kl": 0.26426793139437055,
+  "agree": 69,
+  "weight_rel_rms": {
+   "gate_proj": 0.09496889176615964,
+   "up_proj": 0.0949623022236345,
+   "down_proj": 0.09492023866944467,
+   "q_proj": 0.09777761259346197,
+   "k_proj": 0.09693402002498606,
+   "v_proj": 0.09709078456636797,
+   "o_proj": 0.09770422521295839
+  },
+  "load_s": 336.7,
+  "quant_s": 21.3
+ },
+ "rows": [
+  {
+   "id": "smoke/refund-double-charge/billing",
+   "kl": 1.6498388641591954e-06,
+   "agree": true,
+   "max_dp": 5.364418029785156e-06
+  },
+  {
+   "id": "smoke/refund-double-charge/tone",
+   "kl": 2.5607532177981208e-05,
+   "agree": true,
+   "max_dp": 9.098544251173735e-05
+  },
+  {
+   "id": "smoke/refund-double-charge/urgency",
+   "kl": 0.0026067538536860605,
+   "agree": true,
+   "max_dp": 0.013842165470123291
+  },
+  {
+   "id": "smoke/server-down/outage",
+   "kl": 3.998044145795231e-08,
+   "agree": true,
+   "max_dp": 1.0975936675095e-06
+  },
+  {
+   "id": "smoke/server-down/team",
+   "kl": 1.0404439723514054e-07,
+   "agree": true,
+   "max_dp": 3.5762786865234375e-07
+  },
+  {
+   "id": "smoke/server-down/urgency",
+   "kl": -5.162665869467628e-08,
+   "agree": true,
+   "max_dp": 5.526544555323198e-07
+  },
+  {
+   "id": "smoke/arith-1/left",
+   "kl": 6.592147310930948e-06,
+   "agree": true,
+   "max_dp": 2.2649765014648438e-05
+  },
+  {
+   "id": "smoke/arith-2/final",
+   "kl": 3.853566995754079e-06,
+   "agree": true,
+   "max_dp": 1.8358230590820312e-05
+  },
+  {
+   "id": "smoke/capital/capital",
+   "kl": 3.777290224680798e-05,
+   "agree": true,
+   "max_dp": 0.0001417398452758789
+  },
+  {
+   "id": "smoke/statement-true/true",
+   "kl": 9.474811042716308e-06,
+   "agree": true,
+   "max_dp": 2.6106834411621094e-05
+  },
+  {
+   "id": "smoke/statement-false/true",
+   "kl": 1.5790456485071602e-06,
+   "agree": true,
+   "max_dp": 6.814383596065454e-06
+  },
+  {
+   "id": "smoke/spam/spam",
+   "kl": 1.1993686891534194e-07,
+   "agree": true,
+   "max_dp": 1.933592102432158e-06
+  },
+  {
+   "id": "smoke/not-spam/spam",
+   "kl": 8.543530549015378e-07,
+   "agree": true,
+   "max_dp": 4.0531158447265625e-06
+  },
+  {
+   "id": "smoke/review-pos/positive",
+   "kl": 6.652643857833112e-07,
+   "agree": true,
+   "max_dp": 4.5046836021356285e-06
+  },
+  {
+   "id": "smoke/review-pos/rating",
+   "kl": 6.26008746307383e-05,
+   "agree": true,
+   "max_dp": 0.0008730292320251465
+  },
+  {
+   "id": "smoke/review-neg/positive",
+   "kl": 2.8615554678245516e-07,
+   "agree": true,
+   "max_dp": 1.7881393432617188e-06
+  },
+  {
+   "id": "smoke/review-neg/rating",
+   "kl": 0.0005276346805494768,
+   "agree": true,
+   "max_dp": 0.006163656711578369
+  },
+  {
+   "id": "smoke/review-mixed/rating",
+   "kl": 0.0008822614515751729,
+   "agree": true,
+   "max_dp": 0.004240517970174551
+  },
+  {
+   "id": "smoke/lang/language",
+   "kl": 7.218825714175913e-08,
+   "agree": true,
+   "max_dp": 3.0843125387036707e-07
+  },
+  {
+   "id": "smoke/lang/booking",
+   "kl": 7.282785190822278e-07,
+   "agree": true,
+   "max_dp": 3.933906555175781e-06
+  },
+  {
+   "id": "smoke/chat-state/cancel",
+   "kl": 2.6211039289037986e-07,
+   "agree": true,
+   "max_dp": 5.162728484719992e-06
+  },
+  {
+   "id": "smoke/policy/eligible",
+   "kl": 3.270212180002953e-07,
+   "agree": true,
+   "max_dp": 3.0994415283203125e-06
+  },
+  {
+   "id": "smoke/injection/weather",
+   "kl": 7.305488261409996e-07,
+   "agree": true,
+   "max_dp": 3.337860107421875e-06
+  },
+  {
+   "id": "smoke/severity/severity",
+   "kl": 3.4017637768062514e-06,
+   "agree": true,
+   "max_dp": 2.5987625122070312e-05
+  },
+  {
+   "id": "smoke/severity-2/severity",
+   "kl": 4.908260466031923e-05,
+   "agree": true,
+   "max_dp": 9.548664093017578e-05
+  },
+  {
+   "id": "smoke/animal/animal",
+   "kl": -7.665120279336558e-09,
+   "agree": true,
+   "max_dp": 9.5367431640625e-07
+  },
+  {
+   "id": "smoke/sentiment-struct/sentiment",
+   "kl": 1.7262475960593405e-05,
+   "agree": true,
+   "max_dp": 3.314018249511719e-05
+  },
+  {
+   "id": "smoke/empty-state/math",
+   "kl": 3.662426202314272e-06,
+   "agree": true,
+   "max_dp": 0.00011080503463745117
+  },
+  {
+   "id": "smoke/date/due",
+   "kl": -1.1736139195857253e-08,
+   "agree": true,
+   "max_dp": 8.290662663057446e-07
+  },
+  {
+   "id": "smoke/date/overdue_mar_20",
+   "kl": 0.26426793139437055,
+   "agree": false,
+   "max_dp": 0.3570660352706909
+  },
+  {
+   "id": "jev/hard-opus-a-long_policy-01/decision",
+   "kl": 2.1348028564696987e-05,
+   "agree": true,
+   "max_dp": 0.0001417994499206543
+  },
+  {
+   "id": "jev/hard-sol-b-long_policy-02/decision",
+   "kl": 0.0005450024232995223,
+   "agree": true,
+   "max_dp": 0.01033829152584076
+  },
+  {
+   "id": "jev/hard-opus-b-multi_hop-04/decision",
+   "kl": 0.0008834104212935979,
+   "agree": true,
+   "max_dp": 0.007264077663421631
+  },
+  {
+   "id": "jev/hard-opus-c-temporal_numeric-06/decision",
+   "kl": 0.03461725152284629,
+   "agree": true,
+   "max_dp": 0.12022525072097778
+  },
+  {
+   "id": "jev/hard-opus-b-multi_hop-05/decision",
+   "kl": 0.014981753972913103,
+   "agree": false,
+   "max_dp": 0.08381727337837219
+  },
+  {
+   "id": "jev/hard-opus-b-ambiguous-10/decision",
+   "kl": 6.498995846916533e-07,
+   "agree": true,
+   "max_dp": 4.172325134277344e-06
+  },
+  {
+   "id": "jev/hard-opus-a-long_policy-11/decision",
+   "kl": 0.024220022078717672,
+   "agree": true,
+   "max_dp": 0.04798728600144386
+  },
+  {
+   "id": "jev-multi/long_policy-03/decision",
+   "kl": 0.25286883107264274,
+   "agree": false,
+   "max_dp": 0.34680697321891785
+  },
+  {
+   "id": "jev-multi/long_policy-03/mentions_money",
+   "kl": 0.0005299576412310801,
+   "agree": true,
+   "max_dp": 0.0012408465263433754
+  },
+  {
+   "id": "jev-multi/long_policy-03/doc_kind",
+   "kl": 2.577973078598841e-07,
+   "agree": true,
+   "max_dp": 1.7881393432617188e-06
+  },
+  {
+   "id": "jev-multi/long_policy-03/complexity",
+   "kl": 0.04523116861526655,
+   "agree": true,
+   "max_dp": 0.10947078466415405
+  },
+  {
+   "id": "edge/eight-questions/lang",
+   "kl": 9.178735161271395e-07,
+   "agree": true,
+   "max_dp": 3.814697265625e-06
+  },
+  {
+   "id": "edge/eight-questions/refund",
+   "kl": 3.883522148189623e-08,
+   "agree": true,
+   "max_dp": 1.5497207641601562e-06
+  },
+  {
+   "id": "edge/eight-questions/angry",
+   "kl": 0.0004331636531211701,
+   "agree": true,
+   "max_dp": 0.0020716190338134766
+  },
+  {
+   "id": "edge/eight-questions/product",
+   "kl": 3.553689981228365e-07,
+   "agree": true,
+   "max_dp": 2.5033950805664062e-06
+  },
+  {
+   "id": "edge/eight-questions/urgency",
+   "kl": 6.765737062490181e-06,
+   "agree": true,
+   "max_dp": 8.71419906616211e-05
+  },
+  {
+   "id": "edge/eight-questions/stars",
+   "kl": 1.1435930672783629e-05,
+   "agree": true,
+   "max_dp": 0.0003348332829773426
+  },
+  {
+   "id": "edge/eight-questions/channel",
+   "kl": 9.68330232361592e-07,
+   "agree": true,
+   "max_dp": 2.384185791015625e-06
+  },
+  {
+   "id": "edge/eight-questions/safety",
+   "kl": 0.0016062057375611201,
+   "agree": true,
+   "max_dp": 0.004358947277069092
+  },
+  {
+   "id": "edge/eight-questions-reordered/safety",
+   "kl": 0.0005006588502960553,
+   "agree": true,
+   "max_dp": 0.0017343272920697927
+  },
+  {
+   "id": "edge/eight-questions-reordered/channel",
+   "kl": 1.1295796724364199e-06,
+   "agree": true,
+   "max_dp": 5.602836608886719e-06
+  },
+  {
+   "id": "edge/eight-questions-reordered/stars",
+   "kl": 0.00014659257994753582,
+   "agree": true,
+   "max_dp": 0.0012976527214050293
+  },
+  {
+   "id": "edge/eight-questions-reordered/urgency",
+   "kl": 8.284911599142142e-05,
+   "agree": true,
+   "max_dp": 0.0005733370780944824
+  },
+  {
+   "id": "edge/eight-questions-reordered/product",
+   "kl": 6.240751957351668e-07,
+   "agree": true,
+   "max_dp": 3.0994415283203125e-06
+  },
+  {
+   "id": "edge/eight-questions-reordered/angry",
+   "kl": 0.00010245193853808328,
+   "agree": true,
+   "max_dp": 0.0005578439449891448
+  },
+  {
+   "id": "edge/eight-questions-reordered/refund",
+   "kl": 6.424463490566058e-07,
+   "agree": true,
+   "max_dp": 4.76837158203125e-06
+  },
+  {
+   "id": "edge/eight-questions-reordered/lang",
+   "kl": 1.090972063114502e-06,
+   "agree": true,
+   "max_dp": 3.2186508178710938e-06
+  },
+  {
+   "id": "edge/40-options/country",
+   "kl": 1.4706110652942353e-06,
+   "agree": true,
+   "max_dp": 6.732772817485966e-06
+  },
+  {
+   "id": "edge/120-options/sum",
+   "kl": 0.017767980326204455,
+   "agree": true,
+   "max_dp": 0.0728687047958374
+  },
+  {
+   "id": "edge/255-options/ticket",
+   "kl": 7.78118469631124e-07,
+   "agree": true,
+   "max_dp": 3.814697265625e-06
+  },
+  {
+   "id": "edge/empty-state/empty",
+   "kl": 4.04305211320961e-05,
+   "agree": true,
+   "max_dp": 0.00023654126562178135
+  },
+  {
+   "id": "edge/empty-state/guess",
+   "kl": 9.557641010259166e-05,
+   "agree": true,
+   "max_dp": 0.0003058314323425293
+  },
+  {
+   "id": "edge/json-state/total",
+   "kl": 1.0345988153361016e-07,
+   "agree": true,
+   "max_dp": 7.207084991023294e-07
+  },
+  {
+   "id": "edge/json-state/shipped",
+   "kl": 1.072941905672134e-07,
+   "agree": true,
+   "max_dp": 5.960464477539062e-07
+  },
+  {
+   "id": "edge/json-state/vip",
+   "kl": 1.1121040999889606e-07,
+   "agree": true,
+   "max_dp": 1.5497207641601562e-06
+  },
+  {
+   "id": "edge/unicode/tokyo_monday",
+   "kl": 1.1188566473110554e-06,
+   "agree": true,
+   "max_dp": 1.049041748046875e-05
+  },
+  {
+   "id": "edge/unicode/cafe",
+   "kl": 2.5220328410697506e-08,
+   "agree": true,
+   "max_dp": 3.5762786865234375e-07
+  },
+  {
+   "id": "edge/score-10/rating",
+   "kl": 0.015565835648070315,
+   "agree": true,
+   "max_dp": 0.07474076747894287
+  },
+  {
+   "id": "edge/long-log/failure",
+   "kl": 8.936471444681057e-09,
+   "agree": true,
+   "max_dp": 7.452908903360367e-07
+  },
+  {
+   "id": "edge/long-log/which",
+   "kl": 2.1499057505596193e-06,
+   "agree": true,
+   "max_dp": 3.5762786865234375e-06
+  },
+  {
+   "id": "edge/long-log/cause",
+   "kl": 3.7779329304413794e-08,
+   "agree": true,
+   "max_dp": 6.026350263255154e-08
+  },
+  {
+   "id": "edge/one-option/only",
+   "kl": 0.0,
+   "agree": true,
+   "max_dp": 0.0
+  }
+ ]
+}

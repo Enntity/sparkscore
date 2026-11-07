@@ -1,0 +1,95 @@
+{
+  "harness": "jevbench",
+  "harness_commit": "609a664e81f46e03731600bd7bd9f1b7a61257c5",
+  "harness_dirty": false,
+  "endpoint": "http://127.0.0.1:8015",
+  "model": "sparkscore-d3",
+  "endpoint_info": {
+    "/v1/models": {
+      "models": [
+        {
+          "name": "sparkscore-d3",
+          "description": "SparkScore: local:model with prompt template d3-ultra on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "sparkscore-latest",
+          "description": "SparkScore: local:model with prompt template d3-ultra on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "jev-latest",
+          "description": "SparkScore: local:model with prompt template d3-ultra on the Atlas score backend",
+          "release_date": "2026-11-05"
+        }
+      ]
+    },
+    "/v1/limits": {
+      "max_questions": 256,
+      "max_choice_options": 255,
+      "max_score_levels": 10,
+      "max_body_bytes": 33554432,
+      "per_question_context": 32768,
+      "per_request_context": 65536,
+      "max_concurrent_requests": 16
+    }
+  },
+  "sparkscore_commit": "8597e49f2841f7d2394c42cffb60b8999be14ef1",
+  "host_python": "3.12.3",
+  "started_utc": "2026-11-07T16:12:24.772414+00:00",
+  "commands": [
+    {
+      "argv": [
+        "/home/user/sparkscore/repo/.venv/bin/python",
+        "-m",
+        "jevbench.cli",
+        "run",
+        "--tasks",
+        "datasets/public/easy.jsonl,datasets/public/hard.jsonl,datasets/public/original.jsonl",
+        "--adapter",
+        "typesafe",
+        "--endpoint",
+        "http://127.0.0.1:8015",
+        "--model",
+        "sparkscore-d3",
+        "--key-env",
+        "",
+        "--results",
+        "/home/user/sparkscore/release-verify/jevbench-3/raw/results.jsonl",
+        "--ledger",
+        "/home/user/sparkscore/release-verify/jevbench-3/raw/ledger.jsonl",
+        "--raw-dir",
+        "/home/user/sparkscore/release-verify/jevbench-3/raw/responses",
+        "--price-in-per-m",
+        "0",
+        "--price-out-per-m",
+        "0",
+        "--cost-basis",
+        "local_spark_compute_excluded",
+        "--run-label",
+        "sparkscore-d3",
+        "--manifest",
+        "/home/user/sparkscore/release-verify/jevbench-3/raw/run-manifest.json"
+      ],
+      "exit": 0,
+      "seconds": 78.1
+    },
+    {
+      "argv": [
+        "/home/user/sparkscore/repo/.venv/bin/python",
+        "-m",
+        "jevbench.cli",
+        "summarize",
+        "--tasks",
+        "datasets/public/easy.jsonl,datasets/public/hard.jsonl,datasets/public/original.jsonl",
+        "--results",
+        "/home/user/sparkscore/release-verify/jevbench-3/raw/results.jsonl",
+        "--public-export",
+        "/home/user/sparkscore/release-verify/jevbench-3/raw/public-export.json"
+      ],
+      "exit": 0,
+      "seconds": 0.1
+    }
+  ],
+  "finished_utc": "2026-11-07T16:13:42.891274+00:00"
+}

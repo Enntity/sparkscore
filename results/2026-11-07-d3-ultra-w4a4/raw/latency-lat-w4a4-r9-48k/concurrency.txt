@@ -1,0 +1,6 @@
+  K  wall_p50  wall_max engine_p50  batched  max|dp| vs solo
+  1     200.5     200.5      198.3        1           0.0000   (all 1 done in 202 ms)
+  2     297.7     395.6      197.1        1           0.0000   (all 2 done in 397 ms)
+  4     728.7     729.5      528.6        3           0.0000   (all 4 done in 731 ms)
+  8    1324.6    1519.7     1123.9        6           0.0000   (all 8 done in 1523 ms)
+ 16    2447.5    2977.2     1124.2        6           0.0000   (all 16 done in 2984 ms)

@@ -1,0 +1,61 @@
+{
+  "harness": "kev",
+  "harness_commit": "2074cc44256200bb37540103fa4572901faa10f3",
+  "harness_dirty": false,
+  "endpoint": "http://127.0.0.1:8008",
+  "model": "sparkscore-latest",
+  "endpoint_info": {
+    "/v1/models": {
+      "models": [
+        {
+          "name": "sparkscore-qwen3.6-35b-a3b",
+          "description": "SparkScore: local:Qwen3.6-35B-A3B-NVFP4 with prompt template chat-v1 on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "sparkscore-latest",
+          "description": "SparkScore: local:Qwen3.6-35B-A3B-NVFP4 with prompt template chat-v1 on the Atlas score backend",
+          "release_date": "2026-11-05"
+        },
+        {
+          "name": "jev-latest",
+          "description": "SparkScore: local:Qwen3.6-35B-A3B-NVFP4 with prompt template chat-v1 on the Atlas score backend",
+          "release_date": "2026-11-05"
+        }
+      ]
+    },
+    "/v1/limits": {
+      "max_choice_options": 255,
+      "max_score_levels": 10,
+      "max_body_bytes": 33554432,
+      "per_question_context": 32768,
+      "per_request_context": 65536,
+      "max_concurrent_requests": 16
+    }
+  },
+  "sparkscore_commit": null,
+  "host_python": "3.12.3",
+  "started_utc": "2026-11-06T07:43:39.903999+00:00",
+  "commands": [
+    {
+      "argv": [
+        "../kev/.venv/bin/python",
+        "-m",
+        "kev.benchmark",
+        "--remote",
+        "http://127.0.0.1:8008",
+        "--remote-model",
+        "sparkscore-latest",
+        "--suite",
+        "evals/v7/decision-v7",
+        "--out",
+        "/home/user/sparkscore/results/kev-decision-v7-a3b-nvfp4-score/raw/decision-v7",
+        "--remote-concurrency",
+        "1"
+      ],
+      "exit": 0,
+      "seconds": 195.5
+    }
+  ],
+  "finished_utc": "2026-11-06T07:46:55.363290+00:00"
+}

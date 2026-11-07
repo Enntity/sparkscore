@@ -1,0 +1,17 @@
+sparkscore=8597e49f2841f7d2394c42cffb60b8999be14ef1 image=sparkscore:28d408ac5cbc box=spark-4562 date=2026-11-07T16:07:31Z
+{
+  "schema": "sparkscore.atlas-engine-source/v1",
+  "note": "The score path and dense 27B prefill kernels, on Atlas-Inf main 999bfc48d; proposed upstream in Atlas-Inf/atlas (see upstream_pr). Repin with install/repin.sh once it merges.",
+  "repository": "https://github.com/Enntity/atlas.git",
+  "branch": "upstream/systemone-score-20261105",
+  "commit": "b594151da3a4884691d532806276d28522c8b438",
+  "tree": "f48d7947146c05f4df27498ca127e3f86f91f96b",
+  "upstream_pr": null,
+  "target": {
+    "hw": "gb10",
+    "model": "qwen3.8-27b",
+    "quant": "nvfp4"
+  },
+  "license": "AGPL-3.0-only"
+}
+NVIDIA GB10, 580.178.04, 3003 MHz, 46

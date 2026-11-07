@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use SparkScore, please cite it as below, and cite d3-ultra (vLLM Semantic Router team) for the model."
+title: "SparkScore: typed, calibrated decisions on one DGX Spark"
+authors:
+  - name: "Enntity"
+repository-code: "https://github.com/Enntity/sparkscore"
+license: AGPL-3.0-only
+date-released: 2026-11-07
+keywords: [decision model, calibration, NVFP4, DGX Spark, Atlas, Jev]

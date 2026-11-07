@@ -1,0 +1,35 @@
+{
+  "team": {
+    "type": "choice",
+    "choice": "billing",
+    "confidence": 0.9914780872682811,
+    "probabilities": {
+      "billing": 0.9943187248455208,
+      "infrastructure": 0.00014367194594831328,
+      "sales": 0.005537603208530902
+    }
+  },
+  "urgency": {
+    "type": "score",
+    "score": 0.4831177479150295,
+    "confidence": 0.5168822520849705,
+    "legend": {
+      "0": "Can wait",
+      "1": "This week",
+      "2": "Today",
+      "3": "Right now"
+    },
+    "probabilities": {
+      "0": 0.5413539671206417,
+      "1": 0.43864124573774865,
+      "2": 0.0155378592475481,
+      "3": 0.004466927894061542
+    }
+  },
+  "refund": {
+    "type": "noul",
+    "noul": 0.9541697672992374
+  }
+}
+round trip 202 ms · Server-Timing: render;dur=1.572, backend;dur=183.606, answer;dur=0.035, total;dur=185.213 · passes: 1
+smoke test passed

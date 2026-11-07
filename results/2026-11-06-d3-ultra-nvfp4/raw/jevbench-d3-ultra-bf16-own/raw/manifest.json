@@ -1,0 +1,95 @@
+{
+  "harness": "jevbench",
+  "harness_commit": "609a664e81f46e03731600bd7bd9f1b7a61257c5",
+  "harness_dirty": false,
+  "endpoint": "http://spark-b:8095",
+  "model": "d3-ultra",
+  "endpoint_info": {
+    "/v1/models": {
+      "models": [
+        {
+          "name": "d3-ultra",
+          "description": "Typed decisions with a probability for every option",
+          "max_input_tokens": 131072,
+          "modalities": [
+            "text",
+            "image",
+            "video"
+          ],
+          "image_max_pixels": 1638400,
+          "video": {
+            "fps": 2.0,
+            "max_frames": 32,
+            "max_pixels_per_frame": 200704,
+            "max_tokens_per_request": 16384,
+            "max_bytes": 32000000
+          }
+        }
+      ]
+    },
+    "/v1/limits": {
+      "http_status": 404,
+      "body": {
+        "detail": "nothing is served at /v1/limits"
+      }
+    }
+  },
+  "sparkscore_commit": null,
+  "host_python": "3.12.3",
+  "started_utc": "2026-11-06T16:34:32.353897+00:00",
+  "commands": [
+    {
+      "argv": [
+        "/home/user/sparkscore/repo/.venv/bin/python",
+        "-m",
+        "jevbench.cli",
+        "run",
+        "--tasks",
+        "datasets/public/easy.jsonl,datasets/public/hard.jsonl,datasets/public/original.jsonl",
+        "--adapter",
+        "typesafe",
+        "--endpoint",
+        "http://spark-b:8095",
+        "--model",
+        "d3-ultra",
+        "--key-env",
+        "SPARKSCORE_API_KEY",
+        "--results",
+        "/home/user/sparkscore/results/jevbench-d3-ultra-bf16-own/raw/results.jsonl",
+        "--ledger",
+        "/home/user/sparkscore/results/jevbench-d3-ultra-bf16-own/raw/ledger.jsonl",
+        "--raw-dir",
+        "/home/user/sparkscore/results/jevbench-d3-ultra-bf16-own/raw/responses",
+        "--price-in-per-m",
+        "0",
+        "--price-out-per-m",
+        "0",
+        "--cost-basis",
+        "local_spark_compute_excluded",
+        "--run-label",
+        "d3-ultra",
+        "--manifest",
+        "/home/user/sparkscore/results/jevbench-d3-ultra-bf16-own/raw/run-manifest.json"
+      ],
+      "exit": 0,
+      "seconds": 256.7
+    },
+    {
+      "argv": [
+        "/home/user/sparkscore/repo/.venv/bin/python",
+        "-m",
+        "jevbench.cli",
+        "summarize",
+        "--tasks",
+        "datasets/public/easy.jsonl,datasets/public/hard.jsonl,datasets/public/original.jsonl",
+        "--results",
+        "/home/user/sparkscore/results/jevbench-d3-ultra-bf16-own/raw/results.jsonl",
+        "--public-export",
+        "/home/user/sparkscore/results/jevbench-d3-ultra-bf16-own/raw/public-export.json"
+      ],
+      "exit": 0,
+      "seconds": 0.1
+    }
+  ],
+  "finished_utc": "2026-11-06T16:38:49.080695+00:00"
+}

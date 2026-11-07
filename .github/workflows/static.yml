@@ -1,0 +1,34 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quick:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Tools
+        shell: bash
+        run: |
+          shopt -s nullglob
+          tests=(tests/test_*.py)
+          if (( ${#tests[@]} )); then
+            # tokenizer and chat template only; test_render fetches the pinned tokenizer files (about 12 MB)
+            python3 -m pip install --quiet -r tools/sparkscore/requirements.txt
+            python3 -m unittest discover -s tests -v
+          fi
+      - name: Result receipts
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for d in results/*/; do (cd "$d" && sha256sum -c --quiet SHA256SUMS); done

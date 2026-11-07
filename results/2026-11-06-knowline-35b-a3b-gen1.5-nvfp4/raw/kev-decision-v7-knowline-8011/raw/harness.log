@@ -1,0 +1,82 @@
+evaluated 50/1204
+evaluated 100/1204
+evaluated 150/1204
+evaluated 200/1204
+evaluated 250/1204
+evaluated 300/1204
+evaluated 350/1204
+evaluated 400/1204
+evaluated 450/1204
+evaluated 500/1204
+evaluated 550/1204
+evaluated 600/1204
+evaluated 650/1204
+evaluated 700/1204
+evaluated 750/1204
+evaluated 800/1204
+evaluated 850/1204
+evaluated 900/1204
+evaluated 950/1204
+evaluated 1000/1204
+evaluated 1050/1204
+evaluated 1100/1204
+evaluated 1150/1204
+evaluated 1200/1204
+{
+  "objective": -0.23856701283852344,
+  "clean": {
+    "n": 1264,
+    "nll": 0.3407915720712539,
+    "acc": 0.877373417721519,
+    "ece": 0.024175471385577428,
+    "brier": 0.1807591404811879,
+    "mean_conf": 0.8687137294831739,
+    "confident_error_rate": 0.01740506329113924,
+    "coverage_at_0_9": 0.6400316455696202,
+    "accuracy_at_0_9": 0.9728059332509271,
+    "coverage_at_5pct_error": 0.7856012658227848,
+    "coverage_at_1pct_error": 0.25158227848101267,
+    "aurc": 0.03134874186626084,
+    "error_rate_at_0_9": 0.027194066749072928,
+    "confidence_bias": -0.008659688238345065,
+    "top_bins": {
+      "0.9": {
+        "n": 809,
+        "errors": 22,
+        "error_rate": 0.027194066749072928
+      },
+      "0.95": {
+        "n": 723,
+        "errors": 13,
+        "error_rate": 0.017980636237897647
+      },
+      "0.99": {
+        "n": 469,
+        "errors": 5,
+        "error_rate": 0.010660980810234541
+      }
+    },
+    "selective": {
+      "0.5": {
+        "coverage": 0.5,
+        "accuracy": 0.9841772151898734,
+        "confidence_cutoff": 0.9742135526647763
+      },
+      "0.8": {
+        "coverage": 0.8006329113924051,
+        "accuracy": 0.9456521739130435,
+        "confidence_cutoff": 0.693725545195682
+      }
+    },
+    "score_mae": 0.45009102907611964,
+    "ranked_probability_score": 0.06481028393537189
+  },
+  "coverage": {
+    "requested_records": 1204,
+    "requested_questions": 1468,
+    "evaluated_records": 1204,
+    "evaluated_questions": 1468,
+    "rejected_records": 0,
+    "truncated_records": 0
+  }
+}

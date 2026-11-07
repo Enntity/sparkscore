@@ -1,0 +1,83 @@
+evaluated 50/1264
+evaluated 100/1264
+evaluated 150/1264
+evaluated 200/1264
+evaluated 250/1264
+evaluated 300/1264
+evaluated 350/1264
+evaluated 400/1264
+evaluated 450/1264
+evaluated 500/1264
+evaluated 550/1264
+evaluated 600/1264
+evaluated 650/1264
+evaluated 700/1264
+evaluated 750/1264
+evaluated 800/1264
+evaluated 850/1264
+evaluated 900/1264
+evaluated 950/1264
+evaluated 1000/1264
+evaluated 1050/1264
+evaluated 1100/1264
+evaluated 1150/1264
+evaluated 1200/1264
+evaluated 1250/1264
+{
+  "objective": -0.5386189100308327,
+  "clean": {
+    "n": 1046,
+    "nll": 0.7620821454021172,
+    "acc": 0.762906309751434,
+    "ece": 0.0931471727726777,
+    "brier": 0.3496485581221007,
+    "mean_conf": 0.8433859751208213,
+    "confident_error_rate": 0.05927342256214149,
+    "coverage_at_0_9": 0.5898661567877629,
+    "accuracy_at_0_9": 0.899513776337115,
+    "coverage_at_5pct_error": 0.367112810707457,
+    "coverage_at_1pct_error": 0.0076481835564053535,
+    "aurc": 0.0984273448614714,
+    "error_rate_at_0_9": 0.10048622366288493,
+    "confidence_bias": 0.08047966536938722,
+    "top_bins": {
+      "0.9": {
+        "n": 617,
+        "errors": 62,
+        "error_rate": 0.10048622366288493
+      },
+      "0.95": {
+        "n": 539,
+        "errors": 43,
+        "error_rate": 0.07977736549165121
+      },
+      "0.99": {
+        "n": 347,
+        "errors": 16,
+        "error_rate": 0.04610951008645533
+      }
+    },
+    "selective": {
+      "0.5": {
+        "coverage": 0.5,
+        "accuracy": 0.9196940726577438,
+        "confidence_cutoff": 0.9579122738316491
+      },
+      "0.8": {
+        "coverage": 0.8011472275334608,
+        "accuracy": 0.8400954653937948,
+        "confidence_cutoff": 0.6513548674322567
+      }
+    },
+    "score_mae": 0.2087658314624574,
+    "ranked_probability_score": 0.057443841450619766
+  },
+  "coverage": {
+    "requested_records": 1264,
+    "requested_questions": 1264,
+    "evaluated_records": 1264,
+    "evaluated_questions": 1264,
+    "rejected_records": 0,
+    "truncated_records": 0
+  }
+}
