@@ -234,8 +234,8 @@ The details, the cost model and the roofline are in
 ## The engine
 
 The score path and kernels are proposed upstream as an Atlas pull request
-([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)), and knowledge packs as a second one on top
-of it. Until it merges, SparkScore builds Atlas from the
+([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). Knowledge packs are on the `Enntity/atlas`
+branch only. Until it merges, SparkScore builds Atlas from the
 [`Enntity/atlas`](https://github.com/Enntity/atlas) branch named in
 [install/atlas-source.json](install/atlas-source.json). Once it merges,
 `install/repin.sh` moves the pin to Atlas-Inf, and nothing else changes.
