@@ -35,13 +35,13 @@ fit();
 
 // ------------------------------------------------------------- the endpoint
 window.__calls = [];
-async function systemOne(scene, state, questions) {
+async function systemOne(scene, state, questions, extra = {}) {
   for (let attempt = 0; attempt < 30; attempt++) {
     const t0 = performance.now();
     const r = await fetch("/v1/systemone", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "sparkscore-d3", state, questions }),
+      body: JSON.stringify({ model: "sparkscore-d3", state, questions, ...extra }),
     });
     if (r.status === 529) { // every slot is busy: back off as the server asks
       await sleep(1000 * (Number(r.headers.get("retry-after")) || 1));
@@ -51,14 +51,18 @@ async function systemOne(scene, state, questions) {
     const rt = performance.now() - t0;
     if (!r.ok) throw new Error(`systemone ${r.status}: ${JSON.stringify(body.detail)}`);
     const timing = {};
+    let pack = null;
     for (const part of (r.headers.get("server-timing") || "").split(",")) {
       const m = /\s*(\w+);dur=([\d.]+)/.exec(part);
       if (m) timing[m[1]] = Number(m[2]);
+      const k = /\s*pack;desc=(\w+)/.exec(part);
+      if (k) pack = k[1];
     }
     const out = {
       answers: body.answers, server: timing.total, backend: timing.backend, rt,
       passes: Number(r.headers.get("x-sparkscore-passes")), tokens: body.usage.input_tokens,
       questions: Object.keys(questions).length,
+      pack, packTokens: Number(r.headers.get("x-sparkscore-pack-tokens")) || 0,
     };
     window.__calls.push({ scene, server: out.server, rt: out.rt, passes: out.passes, questions: out.questions, tokens: out.tokens, t: Date.now() });
     return out;
@@ -734,6 +738,158 @@ async function sceneClaims() {
   done();
 }
 
+// ================================================== 5. Knowledge packs
+async function scenePacks() {
+  title("Knowledge packs");
+  root.className = "packs";
+  const D = DEMO.packs;
+  const H = hud([
+    ["mode", "Mode", "var(--violet)", ""],
+    ["ms", "Server time", "var(--green)", "this ticket"],
+    ["n", "Tickets", "var(--cyan)", ""],
+    ["rules", "Rules followed", "var(--amber)", "handbook overrides"],
+    ["tok", "Handbook tokens", "var(--pink)", ""],
+  ]);
+  const text = await (await fetch(D.handbook)).text();
+  const hb = el("div", "panel hb", `<div class="insp-head"><span class="eyebrow">${esc(D.title)}</span><span class="hbchip" id="hbchip"></span></div><pre></pre><div class="packbadge" id="pb"></div>`);
+  const pre = hb.querySelector("pre");
+  pre.innerHTML = text.split("\n\n").map((para) => {
+    const i = para.indexOf("Override:");
+    return i < 0 ? esc(para) : `${esc(para.slice(0, i))}<span class="rule">${esc(para.slice(i))}</span>`;
+  }).join("\n\n");
+  root.append(hb);
+
+  const tk = el("div", "panel tk", `<div class="insp-head"><span class="eyebrow" id="tke">Ticket</span><span class="ms" id="tkms">— ms</span></div>
+    <div class="who" id="tkwho"></div><div class="ttext" id="tktext"></div><div class="timer" id="timer"></div>`);
+  const rows = {};
+  const qrow = (key, label, type) => {
+    const r = el("div", "qblock arow", `<div class="ql">${label} <span class="qtype">${type}</span><span class="rbadge"></span><span class="mark"></span></div>`);
+    rows[key] = r; tk.append(r); return r;
+  };
+  const teamBars = {};
+  const tr = qrow("team", "Which team?", "choice");
+  for (const [k, name] of Object.entries(D.questions.team.criteria)) { teamBars[k] = pbar(name, "var(--cyan)"); teamBars[k].style.setProperty("--lw", "190px"); tr.append(teamBars[k]); }
+  const urg = levels(D.questions.urgency.criteria, URG_COLORS); qrow("urgency", "Urgency", "score").append(urg);
+  const legal = pbar("Legal review", "var(--pink)"); legal.style.setProperty("--lw", "190px"); qrow("legal", "Needs legal review?", "noul").append(legal);
+  root.append(tk);
+  const $ = (id) => root.querySelector(id);
+
+  const truth = { team: (a) => a.team.choice, urgency: (a) => argmax(D.questions.urgency.criteria.map((_, i) => a.urgency.probabilities[String(i)] || 0)), legal: (a) => (a.legal.noul >= 0.5 ? 1 : 0) };
+  const tally = { ok: 0, n: 0, tickets: 0 };
+  function showTicket(t, label) {
+    $("#tke").textContent = label;
+    $("#tkwho").innerHTML = `${esc(t.name)} · ${esc(t.company)}<span class="plan">customer tier: ${esc(t.tier)}</span>`;
+    $("#tktext").textContent = `“${t.text}”`;
+    for (const [q, r] of Object.entries(rows)) {
+      const rule = t.rules.find((x) => D.ruleQuestion[x] === q);
+      r.querySelector(".rbadge").textContent = rule ? `${D.rules[rule][0]} ${D.rules[rule][1]} ${D.rules[rule][2]}` : "";
+      r.querySelector(".mark").textContent = "";
+      r.classList.remove("ok", "bad");
+    }
+  }
+  function showAnswers(t, r, count = true) {
+    const a = r.answers;
+    for (const [k, b] of Object.entries(teamBars)) b.set(a.team.probabilities[k], k === a.team.choice);
+    urg.set(a.urgency.probabilities);
+    legal.set(a.legal.noul, a.legal.noul >= 0.5);
+    $("#tkms").textContent = `${ms0(r.server)} ms`;
+    let ok = 0;
+    for (const rule of t.rules) {
+      const q = D.ruleQuestion[rule], good = truth[q](a) === t.gold[q];
+      ok += good;
+      const row = rows[q];
+      row.classList.add(good ? "ok" : "bad");
+      row.querySelector(".mark").textContent = good ? "✓" : "✗";
+    }
+    if (count) { tally.ok += ok; tally.n += t.rules.length; tally.tickets += 1; }
+    return ok;
+  }
+  function timer(on) {
+    const e = $("#timer");
+    if (!on) { cancelAnimationFrame(e.raf); return; }
+    const t0 = performance.now();
+    const tick = () => { e.textContent = `${((performance.now() - t0) / 1000).toFixed(2)} s`; e.raf = requestAnimationFrame(tick); };
+    e.classList.add("on"); tick();
+  }
+  async function scroll(ms) {
+    const t0 = performance.now(), max = pre.scrollHeight - pre.clientHeight;
+    while (performance.now() - t0 < ms) { pre.scrollTop = max * ((performance.now() - t0) / ms); await sleep(16); }
+    pre.scrollTop = 0;
+  }
+
+  // 1. The handbook.
+  const hero = D.hero;
+  H.mode("—"); H.n("0"); H.rules("—"); H.tok("—");
+  $("#hbchip").textContent = `${Math.round(text.length / 1000)}K characters · 7 override rules`;
+  caption("A company's <b>support handbook</b>: 58,000 characters, 7 house rules", "routing, urgency and legal overrides, spread through ordinary sections", 0);
+  await scroll(AUTO ? 5200 : 3500);
+
+  // 2. Without it.
+  showTicket(hero, "Ticket");
+  caption("Without the handbook, the model <b>can't know the house rules</b>", "one ticket, three questions: team · urgency · legal", 0);
+  H.mode("No handbook");
+  const none = await systemOne("packs-none", D.state(hero), D.questions);
+  showAnswers(hero, none, false);
+  H.ms(ms0(none.server), "ms");
+  await sleep(3600);
+
+  // 3. In every request.
+  showTicket(hero, "Ticket");
+  caption("Put the handbook <b>in the request</b>: right, but it is read every time", "12K tokens recomputed for every ticket", 0);
+  H.mode("Handbook in request");
+  hb.classList.add("scan");
+  timer(true);
+  const inReq = await systemOne("packs-in-request", `${text}\n\n${D.state(hero)}`, D.questions);
+  timer(false); hb.classList.remove("scan");
+  showAnswers(hero, inReq, false);
+  H.ms(ms0(inReq.server), "ms");
+  H.tok(inReq.tokens.toLocaleString("en-US"));
+  await sleep(3800);
+
+  // 4. A knowledge pack, built once.
+  caption("Or register it once as a <b>knowledge pack</b>", "PUT /v1/knowledge/acme-handbook · the engine keeps its attention keys and recurrent state", 0);
+  const t0 = performance.now();
+  const put = await fetch(`/v1/knowledge/${D.name}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
+  const reg = await put.json();
+  if (!put.ok) throw new Error(`knowledge ${put.status}: ${JSON.stringify(reg.detail)}`);
+  const built = performance.now() - t0;
+  $("#pb").innerHTML = `<b>KNOWLEDGE PACK</b> · ${reg.pack_tokens.toLocaleString("en-US")} tokens · ${reg.pack === "built" ? `built in ${(built / 1000).toFixed(1)} s, once` : "held by the engine"}`;
+  hb.classList.add("packed");
+  H.tok(reg.pack_tokens.toLocaleString("en-US"));
+  H.tok.sub("read in place");
+  $("#hbchip").textContent = `${reg.pack_tokens.toLocaleString("en-US")} tokens · 7 override rules`;
+  await sleep(3400);
+
+  // 5. Every ticket on the pack, for as long as one in-request ticket took.
+  H.mode("Knowledge pack");
+  showTicket(hero, "Ticket");
+  const first = await systemOne("packs", D.state(hero), D.questions, { knowledge_name: D.name });
+  showAnswers(hero, first);
+  H.ms(ms0(first.server), "ms"); H.n(1); H.rules(`${tally.ok}/${tally.n}`);
+  caption(`Same answers in <b>${ms0(first.server)} ms</b>, not ${(inReq.server / 1000).toFixed(1)} s`, "the handbook is read in place, never recomputed", 0);
+  await sleep(3600);
+  caption(`Now: as many tickets as fit in <b>${(inReq.server / 1000).toFixed(1)} s</b>, the time one took before`, "live, one request in flight", 0);
+  const budget = inReq.rt, start = performance.now(), times = [first.server];
+  let i = 0;
+  timer(true);
+  while (performance.now() - start < budget) {
+    const t = D.stream[i++ % D.stream.length];
+    const r = await systemOne("packs", D.state(t), D.questions, { knowledge_name: D.name });
+    showTicket(t, "Ticket");
+    showAnswers(t, r);
+    times.push(r.server);
+    H.ms(ms0(r.server), "ms"); H.n(tally.tickets); H.rules(`${tally.ok}/${tally.n}`);
+    await sleep(16);
+  }
+  timer(false);
+  const p50 = Stats.pct(times, 0.5);
+  caption(`<b>${tally.tickets} tickets</b> in the time <b>1</b> took · ${tally.ok}/${tally.n} house rules followed`, `12K-token handbook · p50 ${ms0(p50)} ms on a pack vs ${ms0(inReq.server)} ms in the request · one DGX Spark`, 0);
+  await sleep(5200);
+  caption("<b>Knowledge packs</b>: your rulebook, read once", "knowledge_name in /v1/systemone · Atlas --score-packs", 0);
+  await sleep(3600);
+  done();
+}
+
 // ================================================================= titles
 const CARDS = {
   intro: { kicker: "Live demo", h1: "SparkScore", h2: "Typed decisions in <b>~150 ms</b> on one DGX Spark",
@@ -743,6 +899,10 @@ const CARDS = {
   s2: { kicker: "02", h1: "Agent Guardrail", h2: "Check every tool call <b>before it runs</b>", facts: ["against a written policy", "inside the agent loop"] },
   s3: { kicker: "03", h1: "Live as you type", h2: "Decisions that keep up with the keyboard", facts: ["5 questions per update", "one request in flight"] },
   s4: { kicker: "04", h1: "Many questions, one pass", h2: "12 typed decisions per document", facts: ["one request per file", "one engine pass"] },
+  packs: { kicker: "Knowledge packs", h1: "Your rulebook, read once", h2: "12K-token handbook: <b>280 ms</b> a ticket, not 5.5 s",
+    facts: ["same answers as the handbook in the request", "PUT /v1/knowledge/NAME · knowledge_name", "Atlas --score-packs · one DGX Spark"],
+    foot: "Measured on one DGX Spark (results/2026-11-08-knowledge-packs). The scene's own timings are live." },
+  s5: { kicker: "05", h1: "Knowledge packs", h2: "A 12K-token handbook, <b>read once</b>", facts: ["register a document by name", "every request reads it in place", "same answers as in the request"] },
   outro: { kicker: "SparkScore", h1: "System One, local", h2: "JevBench public <b>90.9%</b> at p50 <b>146 ms</b>",
     facts: ["d3-ultra 27B (vllm-sr) · NVFP4 W4A4", "Atlas engine · one NVIDIA DGX Spark", "d3's BF16 runtime, same box: 91.3% at 633 ms", "runs locally: the data stays on the box"] },
 };
@@ -762,10 +922,11 @@ function sceneHome() {
     <a href="?scene=guard"><em>02</em><b>Agent Guardrail</b><span>An agent's tool calls checked against a written policy before they run.</span></a>
     <a href="?scene=typing"><em>03</em><b>Live as you type</b><span>A draft reply reviewed on every keystroke burst, one request in flight.</span></a>
     <a href="?scene=claims"><em>04</em><b>Many questions, one pass</b><span>Twelve typed decisions about one insurance claim in a single request.</span></a>
+    <a href="?scene=packs"><em>05</em><b>Knowledge packs</b><span>A 12K-token handbook registered once; every ticket follows its house rules at full speed.</span></a>
   </div>`;
 }
 
-const SCENES = { inbox: sceneInbox, guard: sceneGuard, typing: sceneTyping, claims: sceneClaims, title: sceneTitle, home: sceneHome };
+const SCENES = { inbox: sceneInbox, guard: sceneGuard, typing: sceneTyping, claims: sceneClaims, packs: scenePacks, title: sceneTitle, home: sceneHome };
 (async () => {
   await document.fonts.ready;
   if (SCENE !== "title") await health();

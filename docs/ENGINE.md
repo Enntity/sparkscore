@@ -190,6 +190,32 @@ branches of 40 tokens each:
 | 4 | 729 ms | 731 ms | 3 | 0 |
 | 16 | 2,448 ms | 2,984 ms | 6 | 0 |
 
+## Knowledge packs
+
+A knowledge pack is a token block that requests continue without recomputing it: a policy or a handbook
+(`crates/spark-model/src/model/trait_impl/prefill_b/score_pack.rs`).
+
+- **Build.** One score pass over the pack's P tokens, as one bidirectional block under `prefix_bidir`. Atlas keeps
+  that pass's sequence instead of freeing it: its KV blocks, and its SSM slot holding the GDN state and conv
+  window after the last token.
+- **Request.** A request on a pack is planned at positions shifted by P (`score_plan.rs`). A stream that reads
+  the pack directly (the request's head, or a branch without one):
+  - shares the pack's whole KV blocks by reference count;
+  - copies the pack's partial last block into a block it owns;
+  - enters the GDN layers from the pack's state through the pass's pointer tables. The single-launch scan and
+    conv1d read it in place, so no state is copied.
+  - Branches share their head's blocks and fork from it as before.
+- **Mask.** The state block's `state_end` now spans the pack, so the state and question blocks read the pack's
+  keys. The pack never reads anything after it. No kernel changes.
+- **Holding.** Packs are content-addressed by their tokens and attention mode. `--score-packs N` bounds how many
+  are held, evicting the least recently used after a new one is built. Each pack keeps one SSM slot, so the
+  scheduler admits that many fewer sequences.
+- **API.** `/v1/score` takes `"pack": [ids]` or `"pack_id"`, answers with `"pack_id"` and
+  `"pack": "built" | "held"`, and answers 404 for an id it no longer holds.
+
+On a 1,179-token handbook, a request costs 174 ms p50 on its pack against 169 ms with no handbook. The extra time
+is attention over the pack's keys in the 16 full-attention layers (results/2026-11-08-knowledge-packs).
+
 ## Dense 27B prefill kernels
 
 The prefill matrix multiplies of the Qwen3.6/3.8-27B hybrids are in

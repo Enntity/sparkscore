@@ -36,7 +36,7 @@ TypeSafe's hosted service. The differences that the code documents:
 | `zstd` bodies | Accepted only when the harness runs on Python 3.14 or later. The container's Python is older, so it answers 415; use `gzip`. |
 | `model` in the response | Always `sparkscore-d3`, even when the request names an alias. |
 | Extra headers | `Server-Timing`, `X-SparkScore-Passes` and `X-SparkScore-Prefix-Tokens`; with `knowledge` on packs, also `X-SparkScore-Pack-Tokens` and a `pack` entry in `Server-Timing`. |
-| `knowledge` | An extension. It is not part of TypeSafe's API. |
+| `knowledge`, `knowledge_name`, `/v1/knowledge` | Extensions. They are not part of TypeSafe's API. |
 
 ## Routes
 
@@ -45,6 +45,9 @@ TypeSafe's hosted service. The differences that the code documents:
 | `POST /v1/systemone` | bearer key, if set | One answer per question. |
 | `GET /v1/models` | bearer key, if set | The model names. |
 | `GET /v1/limits` | bearer key, if set | This deployment's limits. |
+| `GET /v1/knowledge` | bearer key, if set | The named knowledge documents. |
+| `PUT /v1/knowledge/NAME` | bearer key, if set | Register (or replace) a named document: `{"text": "..."}`. Its pack is built before the answer. |
+| `DELETE /v1/knowledge/NAME` | bearer key, if set | Forget a named document. |
 | `GET /health` | none | `{"status": "ok"}` once the harness is up. `./start.sh` starts the harness only after Atlas is healthy. |
 
 Any other path is 404 with `{"detail": "Not Found"}`.
@@ -95,6 +98,7 @@ values are recorded in every run manifest under
 | `questions` | yes | object, at least 1 entry | Question name to question. Answers come back under the same names, in the same order. |
 | `assets` | no | must be absent or `null` | Images are not supported. |
 | `knowledge` | no | nonempty string | A SparkScore extension: text the model reads before the state, such as a policy or a handbook. See [Knowledge](#knowledge). |
+| `knowledge_name` | no | string | A SparkScore extension: a document registered with `PUT /v1/knowledge/NAME` or loaded at startup, used instead of `knowledge`. Unknown names answer 422. |
 
 Other top-level fields are ignored.
 
@@ -150,6 +154,19 @@ slowly.
 
 Knowledge that contains one of the tokenizer's special tokens (`<|im_end|>` and the like) is refused
 with 422.
+
+**Named knowledge.** For a document many requests share, register it once and use its name:
+- **Register:** `PUT /v1/knowledge/acme-handbook` with `{"text": "..."}` answers
+  `{"name", "chars", "pack_tokens", "pack": "built" | "held" | "off"}` once the pack is built.
+- **Use:** requests send `"knowledge_name": "acme-handbook"` instead of the text.
+- **Rules:** names are 1–64 letters, digits, `.`, `_` or `-`, and the library holds up to 64 documents.
+  Registered documents last until the server stops.
+- **At startup:** `KNOWLEDGE_DIR=~/handbooks ./start.sh` loads every `*.md` and `*.txt` file there by its
+  file name, and builds their packs before the server answers. On a bare harness, use `--knowledge NAME=PATH`
+  or `--knowledge-dir DIR`.
+
+`X-SparkScore-Pack-Tokens` and the `pack` entry of `Server-Timing` (`built`, `held` or `off`) say how a request
+used its pack.
 
 ### Response
 

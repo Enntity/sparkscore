@@ -9,6 +9,9 @@ Routes:
 - GET  /v1/models     TypeSafe's model list shape
 - GET  /v1/limits     this deployment's limits (an openjev-sglang extension,
                       not part of TypeSafe's API)
+- GET  /v1/knowledge, PUT|DELETE /v1/knowledge/NAME
+                      named knowledge documents (`tools.sparkscore.knowledge`;
+                      a SparkScore extension)
 - GET  /health
 
 Status codes follow docs.typesafe.ai/api/errors: 400 for a broken request
@@ -34,7 +37,7 @@ import zlib
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from tools.sparkscore import answers, render
+from tools.sparkscore import answers, knowledge as kb, render
 from tools.sparkscore.backends import BackendError, EchoBackend, ScoreBackend, VllmBackend
 
 try:  # Python 3.14+; the official Python SDK sends zstd bodies when it can
@@ -177,9 +180,13 @@ def validate(body, config):
         error(["state"], "Input should be a string, an object or an array", "state_type", state)
     if body.get("assets") is not None:
         error(["assets"], "assets (images) are not supported by this model", "unsupported", None)
-    knowledge = body.get("knowledge")
+    knowledge, knowledge_name = body.get("knowledge"), body.get("knowledge_name")
     if knowledge is not None and (not isinstance(knowledge, str) or not knowledge):
         error(["knowledge"], "Input should be a nonempty string", "string_type", knowledge)
+    if knowledge_name is not None and not isinstance(knowledge_name, str):
+        error(["knowledge_name"], "Input should be a valid string", "string_type", knowledge_name)
+    if knowledge is not None and knowledge_name is not None:
+        error(["knowledge_name"], "send knowledge or knowledge_name, not both", "value_error", knowledge_name)
     if "questions" in body:
         if not isinstance(questions, dict):
             error(["questions"], "Input should be a valid dictionary", "dict_type", questions)
@@ -199,7 +206,7 @@ def validate(body, config):
     ]:
         if nesting(value) > MAX_NESTING:
             raise RequestError(400, f"{'.'.join(map(str, loc))} is nested deeper than {MAX_NESTING} levels")
-    return state, questions, knowledge
+    return state, questions, knowledge, knowledge_name
 
 
 def _validate_question(name, q, error):
@@ -252,10 +259,22 @@ class Service:
     def __init__(self, renderer, backend, config):
         self.renderer, self.backend, self.config = renderer, backend, config
         self.slots = threading.BoundedSemaphore(config.max_concurrent)
+        self.library = kb.Library(self.warm)
+
+    def warm(self, text):
+        """One small request on `text`, so its knowledge pack is encoded before it is needed."""
+        _, _, _, _, pack = self._evaluate(kb.WARM_STATE, kb.WARM_QUESTIONS, text)
+        return pack if pack else (None, 0)
 
     def systemone(self, body):
         """-> (response, timings in ms, prompts the engine ran, prefix tokens, pack status or None)."""
-        state, questions, knowledge = validate(body, self.config)
+        state, questions, knowledge, knowledge_name = validate(body, self.config)
+        if knowledge_name is not None:
+            try:
+                knowledge = self.library.text(knowledge_name)
+            except kb.KnowledgeError as error:
+                raise RequestError(error.status, [{"loc": ["body", "knowledge_name"], "msg": error.detail,
+                                                   "type": "unknown_knowledge", "input": knowledge_name}]) from error
         if not self.slots.acquire(blocking=False):
             raise RequestError(529, "every slot is busy; retry shortly", {"Retry-After": "1"})
         try:
@@ -382,11 +401,66 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/health":
             return self._send(200, {"status": "ok"})
+        if path == "/v1/knowledge":
+            if self._authorized():
+                self._send(200, self.service.library.list())
+            return None
         if path in ("/v1/models", "/v1/limits"):
             if self._authorized():
                 self._send(200, self.service.models() if path == "/v1/models" else self.service.limits())
             return None
         return self._send(404, {"detail": "Not Found"})
+
+    def _knowledge(self, method):
+        """PUT or DELETE /v1/knowledge/NAME."""
+        name = self.path.split("?", 1)[0][len("/v1/knowledge/"):]
+        body = None
+        if method == "PUT":
+            raw = self._read_body()
+            if raw is None:
+                return None
+        if not self._authorized():
+            return None
+        try:
+            if method == "DELETE":
+                self.service.library.delete(name)
+                return self._send(200, {"deleted": name})
+            body = decode_body(raw, self.headers.get("Content-Encoding"), self.service.config.max_body_bytes)
+            text = body.get("text") if isinstance(body, dict) else None
+            return self._send(200, self.service.library.put(name, text))
+        except kb.KnowledgeError as error:
+            return self._send(error.status, {"detail": error.detail})
+        except render.Unsupported as error:
+            return self._send(422, {"detail": str(error)})
+        except RequestError as error:
+            return self._send(error.status, {"detail": error.detail}, error.headers)
+        except BackendError as error:
+            return self._send(error.status, {"detail": str(error)})
+
+    def do_PUT(self):
+        if not self.path.split("?", 1)[0].startswith("/v1/knowledge/"):
+            return self._send(404, {"detail": "Not Found"}, close=True)
+        return self._knowledge("PUT")
+
+    def do_DELETE(self):
+        if not self.path.split("?", 1)[0].startswith("/v1/knowledge/"):
+            return self._send(404, {"detail": "Not Found"}, close=True)
+        return self._knowledge("DELETE")
+
+    def _read_body(self):
+        """The request body, or None after answering 411 / 413."""
+        limit = self.service.config.max_body_bytes
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            length = -1
+        if length < 0:
+            self._send(411, {"detail": "Content-Length is required"}, close=True)
+            return None
+        if length > limit:
+            self._send(413, {"detail": f"the body is over {limit} bytes"}, close=True)
+            return None
+        return self.rfile.read(length)
 
     def do_POST(self):
         if self.path.split("?", 1)[0] != "/v1/systemone":
@@ -465,6 +539,9 @@ def main(argv=None):
     ap.add_argument("--per-request-context", type=int, default=defaults.per_request_context)
     ap.add_argument("--max-body-bytes", type=int, default=defaults.max_body_bytes)
     ap.add_argument("--max-concurrent", type=int, default=defaults.max_concurrent)
+    ap.add_argument("--knowledge", action="append", default=[], metavar="NAME=PATH",
+                    help="a named knowledge document loaded and warmed at startup (repeatable)")
+    ap.add_argument("--knowledge-dir", help="every *.md and *.txt file here, named by its file name, loaded at startup")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args(argv)
     try:
@@ -501,7 +578,10 @@ def main(argv=None):
         backend = VllmBackend(a.backend_url, renderer.option_text, a.backend_model, a.backend_timeout)
     else:
         backend = ScoreBackend(a.backend_url, a.backend_timeout, attention)
-    server = serve(Service(renderer, backend, config), a.host, a.port, a.quiet)
+    service = Service(renderer, backend, config)
+    for doc in service.library.load(a.knowledge, a.knowledge_dir):
+        print(f"knowledge {doc['name']}: {doc['chars']} chars, pack {doc['pack'] or 'none'} ({doc['pack_tokens']} tokens)", flush=True)
+    server = serve(service, a.host, a.port, a.quiet)
     print(f"SparkScore on http://{a.host}:{a.port} ({config.model_id}, {renderer.version}, {a.backend} -> {a.backend_url})", flush=True)
     try:
         threading.Event().wait()

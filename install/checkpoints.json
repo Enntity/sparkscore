@@ -41,7 +41,8 @@
           "ATLAS_DENSE_PREFILL_LOWP": "gu,dn,qkv,o,qkvz,gout"
         },
         "lowp_note": "W4A4 (NVFP4 weights x NVFP4 tokens) for the MLP and attention, W8A8 for the GDN projections. ./start.sh --precision w4a8 (LOWP=1) is the W4A8 alternative (results/2026-11-07-d3-ultra-w4a4)",
-        "atlas_flags": "--kv-cache-dtype bf16 --max-seq-len 49152 --max-prefill-tokens 49152 --max-num-seqs 32 --max-batch-size 32 --gpu-memory-utilization 0.80 --disable-thinking --lm-head-dtype bf16",
+        "atlas_flags": "--kv-cache-dtype bf16 --max-seq-len 49152 --max-prefill-tokens 49152 --max-num-seqs 32 --max-batch-size 32 --gpu-memory-utilization 0.80 --disable-thinking --lm-head-dtype bf16 --score-packs 8",
+        "packs_note": "--score-packs 8: up to 8 knowledge packs held (knowledge / knowledge_name in /v1/systemone); each holds one SSM slot while held. PACKS=0 ./start.sh turns them off (results/2026-11-08-knowledge-packs)",
         "harness_args": "--template d3-ultra --temperature choice=1.636,noul=2.366,score=1.588 --model-id sparkscore-d3",
         "temperature_fit": "tools.sparkscore.calibrate fitted on kev decision-v4 (clean rows) only, on the W4A8 build; the reported kev suites and JevBench are held out, and the W4A4 build keeps them (kev transfer-v4 NLL 0.334 on both)"
       }

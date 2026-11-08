@@ -75,6 +75,25 @@ and harness versions are in
 the expected numbers are in
 [results/2026-11-07-d3-ultra-w4a4](../results/2026-11-07-d3-ultra-w4a4/RESULT.md).
 
+## 6. Knowledge packs (about 20 minutes)
+
+`results/2026-11-08-knowledge-packs/raw/pack-reference.jsonl` holds d3-ultra BF16's own answers for a handbook set
+(40 tickets) and a 4-rule set (112 tickets). Each item has three answers: with the knowledge as an isolated
+prefix (what a pack computes), with it in the state, and with no knowledge. Against a running SparkScore with
+packs on, using a harness without `--temperature` so the probabilities compare with d3's:
+
+```bash
+S=results/2026-11-08-knowledge-packs/scripts
+python3 $S/g3g4.py results/2026-11-08-knowledge-packs/raw/pack-reference.jsonl http://127.0.0.1:8016   # rules, agreement, merged == alone
+python3 $S/g4_speed.py results/2026-11-08-knowledge-packs/raw/pack-reference.jsonl http://127.0.0.1:8016
+python3 $S/g5_long.py                                                                                  # 3K and 12K handbooks
+```
+
+Expected:
+- rules 35/35 and 128/128 on packs;
+- merged vs alone max |Δp| 0.000000;
+- p50 about 174 ms on the 1.2K pack, against about 538 ms in the state.
+
 ## What can differ
 
 - **Latency** depends on GPU clocks and temperature. A Spark running another

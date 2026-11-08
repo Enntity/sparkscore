@@ -461,5 +461,93 @@ class Knowledge(ServerTest):
             self.assertEqual(body["detail"][0]["loc"], ["body", "knowledge"])
 
 
+class PackRenderer(FakeRenderer):
+    """FakeRenderer with knowledge: the knowledge is a pack of one token per character."""
+
+    knowledge_head = True
+
+    def render(self, state, questions, knowledge=None, pack=False):
+        out = super().render(state, questions)
+        if not knowledge:
+            return out
+        tokens = [7] * len(knowledge)
+        return Rendered(out.prefix, out.branches, pack=tokens) if pack else Rendered(tokens + out.prefix, out.branches)
+
+
+class PackBackend(FakeBackend):
+    packs = True
+
+    def score(self, prefix, branches, options, pack=None, report=None):
+        self.calls.append((pack, prefix, branches, options))
+        if report is not None:
+            report["pack"] = "held" if any(c[0] == pack for c in self.calls[:-1]) else "built"
+        rows = [[2.0 ** -k for k in range(len(o))] for o in options]
+        return [[w / sum(r) for w in r] for r in rows], 1
+
+
+def send(port, method, path, body=None):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+    data = json.dumps(body).encode() if body is not None else None
+    conn.request(method, path, data, {"Content-Type": "application/json"} if data else {})
+    resp = conn.getresponse()
+    payload = json.loads(resp.read() or b"null")
+    conn.close()
+    return resp.status, payload, resp
+
+
+class NamedKnowledge(ServerTest):
+    def setUp(self):
+        self.backend = PackBackend()
+        self.service = server.Service(PackRenderer(), self.backend, server.Config(**self.config))
+        self.http = server.serve(self.service, "127.0.0.1", 0, quiet=True)
+        self.port = self.http.server_address[1]
+
+    def test_a_registered_document_is_warmed_and_used_by_name(self):
+        status, body, _ = send(self.port, "PUT", "/v1/knowledge/acme", {"text": "Helios goes to Infrastructure."})
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["name"], body["pack"], body["pack_tokens"]), ("acme", "built", 30))
+        self.assertEqual(len(self.backend.calls), 1)  # the warm-up
+        status, listing, _ = send(self.port, "GET", "/v1/knowledge")
+        self.assertEqual([d["name"] for d in listing["knowledge"]], ["acme"])
+        status, out, resp = post(self.port, dict(request(refund=NOUL), knowledge_name="acme"))
+        self.assertEqual(status, 200, out)
+        self.assertEqual(self.backend.calls[-1][0], [7] * 30)
+        self.assertIn("pack;desc=held", resp.getheader("Server-Timing"))
+        self.assertEqual(resp.getheader("X-SparkScore-Pack-Tokens"), "30")
+
+    def test_unknown_names_and_both_fields_are_refused(self):
+        status, body, _ = post(self.port, dict(request(refund=NOUL), knowledge_name="nope"))
+        self.assert_detail(status, body, 422, ["knowledge_name"], "no knowledge named")
+        status, body, _ = post(self.port, dict(request(refund=NOUL), knowledge="x", knowledge_name="nope"))
+        self.assert_detail(status, body, 422, ["knowledge_name"], "not both")
+
+    def test_bad_names_and_texts_are_refused_and_delete_works(self):
+        self.assertEqual(send(self.port, "PUT", "/v1/knowledge/-bad", {"text": "x"})[0], 422)
+        self.assertEqual(send(self.port, "PUT", "/v1/knowledge/ok", {"text": "  "})[0], 422)
+        self.assertEqual(send(self.port, "PUT", "/v1/knowledge/ok", {"text": "Policy."})[0], 200)
+        self.assertEqual(send(self.port, "DELETE", "/v1/knowledge/ok")[0], 200)
+        self.assertEqual(send(self.port, "DELETE", "/v1/knowledge/ok")[0], 404)
+
+    def test_startup_documents_load_from_a_directory_and_specs(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "handbook.md").write_text("Handbook.")
+            Path(d, "notes.json").write_text("{}")  # not a document
+            extra = Path(d, "x.txt")
+            extra.write_text("Extra policy.")
+            loaded = self.service.library.load([f"policy={extra}"], d)
+        self.assertEqual(sorted(doc["name"] for doc in loaded), ["handbook", "policy", "x"])
+        with self.assertRaises(ValueError):
+            self.service.library.load(["no-equals-sign"])
+
+
+class KnowledgeWithoutPacks(ServerTest):
+    def test_a_template_without_knowledge_cannot_register_it(self):
+        status, body, _ = send(self.port, "PUT", "/v1/knowledge/acme", {"text": "Policy."})
+        self.assertEqual(status, 422)
+        self.assertIn("d3-ultra template only", json.dumps(body))
+
+
 if __name__ == "__main__":
     unittest.main()

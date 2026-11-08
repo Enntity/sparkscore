@@ -16,7 +16,8 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PASS_HEADERS = ("content-type", "server-timing", "retry-after", "x-sparkscore-passes", "x-sparkscore-prefix-tokens")
+PASS_HEADERS = ("content-type", "server-timing", "retry-after", "x-sparkscore-passes", "x-sparkscore-prefix-tokens",
+                "x-sparkscore-pack-tokens")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -27,9 +28,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _proxy(self, method):
         body = None
-        if method == "POST":
+        if method in ("POST", "PUT"):
             body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
-        conn = http.client.HTTPConnection(self.upstream.hostname, self.upstream.port, timeout=60)
+        # A knowledge pack's first encoding or a handbook in the request can take seconds.
+        conn = http.client.HTTPConnection(self.upstream.hostname, self.upstream.port, timeout=600)
         try:
             conn.request(method, self.path, body=body, headers={"Content-Type": self.headers.get("Content-Type", "application/json")})
             r = conn.getresponse()
@@ -64,6 +66,16 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self._proxied():
             return self._proxy("POST")
+        return self.send_error(404)
+
+    def do_PUT(self):  # PUT /v1/knowledge/NAME
+        if self._proxied():
+            return self._proxy("PUT")
+        return self.send_error(404)
+
+    def do_DELETE(self):
+        if self._proxied():
+            return self._proxy("DELETE")
         return self.send_error(404)
 
     def end_headers(self):
