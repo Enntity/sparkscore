@@ -304,6 +304,8 @@ class FakeAtlas(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     seen = []
     hide = set()  # option tokens left out of the top logprobs
+    held = set()  # knowledge packs held (ids)
+    packs_off = False
 
     def log_message(self, *args):
         pass
@@ -326,10 +328,23 @@ class FakeAtlas(BaseHTTPRequestHandler):
             payload = {"choices": choices[::-1]}  # order must come from "index"
         elif self.path == "/v1/score":
             payload = {"probs": [[option_logprob(t) and math.exp(option_logprob(t)) for t in row] for row in body["options"]]}
+            if "pack" in body or "pack_id" in body:
+                if FakeAtlas.packs_off:
+                    msg = "pack: knowledge packs are off on this server (start it with --score-packs N)"
+                    return self.reply(422, {"error": {"message": msg}})
+                pid = body.get("pack_id") or f"{sum(body['pack']) * 7919:016x}"
+                if "pack_id" in body and pid not in FakeAtlas.held:
+                    return self.reply(404, {"error": {"message": f"pack_id {pid} is not held"}})
+                payload["pack"] = "held" if pid in FakeAtlas.held else "built"
+                payload["pack_id"] = pid
+                FakeAtlas.held.add(pid)
         else:
             payload = {}
+        self.reply(200, payload)
+
+    def reply(self, status, payload):
         data = json.dumps(payload).encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -353,7 +368,7 @@ class Backends(unittest.TestCase):
         cls.atlas.server_close()
 
     def setUp(self):
-        FakeAtlas.seen, FakeAtlas.hide = [], set()
+        FakeAtlas.seen, FakeAtlas.hide, FakeAtlas.held, FakeAtlas.packs_off = [], set(), set(), False
 
     def check(self, probs, options):
         for row, o in zip(probs, options):
@@ -400,6 +415,50 @@ class Backends(unittest.TestCase):
         probs, _ = ScoreBackend(self.url, attention="prefix_bidir").score([1, 2], [[3]], options)
         self.check(probs, options)
         self.assertEqual(FakeAtlas.seen[0][1], {"prefix": [1, 2], "branches": [[3]], "options": options, "attention": "prefix_bidir"})
+
+    def test_score_backend_sends_a_pack_once_then_its_id(self):
+        backend, options = ScoreBackend(self.url, attention="prefix_bidir"), [[100, 101]]
+        first, second = {}, {}
+        probs, _ = backend.score([1, 2], [[3]], options, pack=[9, 9, 9], report=first)
+        self.check(probs, options)
+        backend.score([1, 5], [[3]], options, pack=[9, 9, 9], report=second)
+        self.assertEqual(FakeAtlas.seen[0][1]["pack"], [9, 9, 9])
+        self.assertNotIn("pack_id", FakeAtlas.seen[0][1])
+        self.assertEqual(FakeAtlas.seen[1][1]["pack_id"], f"{27 * 7919:016x}")
+        self.assertNotIn("pack", FakeAtlas.seen[1][1])
+        self.assertEqual(FakeAtlas.seen[1][1]["prefix"], [1, 5])
+        self.assertEqual((first["pack"], second["pack"]), ("built", "held"))
+
+    def test_score_backend_resends_a_pack_atlas_no_longer_holds(self):
+        backend, options, report = ScoreBackend(self.url), [[100, 101]], {}
+        backend.score([1], [[3]], options, pack=[4, 4])
+        FakeAtlas.held.clear()  # evicted
+        probs, _ = backend.score([1], [[3]], options, pack=[4, 4], report=report)
+        self.check(probs, options)
+        self.assertEqual([("pack_id" in b, "pack" in b) for _, b in FakeAtlas.seen], [(False, True), (True, False), (False, True)])
+        self.assertEqual(report["pack"], "built")
+
+    def test_score_backend_without_packs_reads_the_pack_as_prefix(self):
+        FakeAtlas.packs_off = True
+        backend, options, report = ScoreBackend(self.url), [[100, 101]], {}
+        probs, _ = backend.score([1, 2], [[3]], options, pack=[7, 8], report=report)
+        self.check(probs, options)
+        self.assertEqual(FakeAtlas.seen[-1][1], {"prefix": [7, 8, 1, 2], "branches": [[3]], "options": options})
+        self.assertEqual(report["pack"], "off")
+
+
+class Knowledge(ServerTest):
+    def test_a_template_without_knowledge_refuses_it(self):
+        status, body, _ = post(self.port, dict(request(refund=NOUL), knowledge="Refunds within 30 days."))
+        self.assertEqual(status, 422)
+        self.assertIn("d3-ultra template only", json.dumps(body))
+        self.assertEqual(self.backend.calls, [])
+
+    def test_knowledge_must_be_a_nonempty_string(self):
+        for bad in ("", 5, ["x"]):
+            status, body, _ = post(self.port, dict(request(refund=NOUL), knowledge=bad))
+            self.assertEqual(status, 422)
+            self.assertEqual(body["detail"][0]["loc"], ["body", "knowledge"])
 
 
 if __name__ == "__main__":

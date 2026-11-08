@@ -157,7 +157,9 @@ def _text(value, nullable=True):
 
 
 def validate(body, config):
-    """-> (state, questions). Mirrors TypeSafe's SystemOneRequest schema."""
+    """-> (state, questions, knowledge). Mirrors TypeSafe's SystemOneRequest schema, plus SparkScore's
+    optional `knowledge`: text the model reads before the state (a policy, a handbook), held by the engine
+    as a knowledge pack where it can."""
     errors = []
 
     def error(loc, msg, kind, value):
@@ -175,6 +177,9 @@ def validate(body, config):
         error(["state"], "Input should be a string, an object or an array", "state_type", state)
     if body.get("assets") is not None:
         error(["assets"], "assets (images) are not supported by this model", "unsupported", None)
+    knowledge = body.get("knowledge")
+    if knowledge is not None and (not isinstance(knowledge, str) or not knowledge):
+        error(["knowledge"], "Input should be a nonempty string", "string_type", knowledge)
     if "questions" in body:
         if not isinstance(questions, dict):
             error(["questions"], "Input should be a valid dictionary", "dict_type", questions)
@@ -194,7 +199,7 @@ def validate(body, config):
     ]:
         if nesting(value) > MAX_NESTING:
             raise RequestError(400, f"{'.'.join(map(str, loc))} is nested deeper than {MAX_NESTING} levels")
-    return state, questions
+    return state, questions, knowledge
 
 
 def _validate_question(name, q, error):
@@ -249,23 +254,28 @@ class Service:
         self.slots = threading.BoundedSemaphore(config.max_concurrent)
 
     def systemone(self, body):
-        """-> (response, timings in ms, prompts the engine ran, prefix tokens)."""
-        state, questions = validate(body, self.config)
+        """-> (response, timings in ms, prompts the engine ran, prefix tokens, pack status or None)."""
+        state, questions, knowledge = validate(body, self.config)
         if not self.slots.acquire(blocking=False):
             raise RequestError(529, "every slot is busy; retry shortly", {"Retry-After": "1"})
         try:
-            return self._evaluate(state, questions)
+            return self._evaluate(state, questions, knowledge)
         finally:
             self.slots.release()
 
-    def _evaluate(self, state, questions):
+    def _evaluate(self, state, questions, knowledge=None):
         cfg = self.config
         t0 = time.perf_counter()
         try:
-            rendered = self.renderer.render(state, questions)
+            if knowledge is None:
+                rendered = self.renderer.render(state, questions)
+            elif not hasattr(self.renderer, "knowledge_head"):
+                raise render.Unsupported("knowledge is supported by the d3-ultra template only")
+            else:
+                rendered = self.renderer.render(state, questions, knowledge, pack=getattr(self.backend, "packs", False))
         except render.Unsupported as error:
             raise RequestError(422, [{"loc": ["body", "state"], "msg": str(error), "type": "unsupported", "input": None}]) from error
-        longest = max(len(b.ids) for b in rendered.branches) + len(rendered.prefix) + 1
+        longest = max(len(b.ids) for b in rendered.branches) + len(rendered.pack) + len(rendered.prefix) + 1
         if longest > cfg.per_question_context or rendered.input_tokens > cfg.per_request_context:
             raise RequestError(400, {
                 "type": "max_tokens_exceeded",
@@ -278,9 +288,14 @@ class Service:
         # rotation of the first pass. A template's second pass, if any, is a
         # second call with the same prefix.
         shown, passes, input_tokens = {}, 0, rendered.input_tokens  # shown: name -> {offset: probs}
+        report = {}
 
         def score(branches):
-            rows, n = self.backend.score(rendered.prefix, [b.ids for b in branches], [b.option_ids for b in branches])
+            ids, opts = [b.ids for b in branches], [b.option_ids for b in branches]
+            if rendered.pack:
+                rows, n = self.backend.score(rendered.prefix, ids, opts, pack=rendered.pack, report=report)
+            else:
+                rows, n = self.backend.score(rendered.prefix, ids, opts)
             for b, p in zip(branches, rows):
                 t = cfg.temperature.get(questions[b.name]["type"], cfg.temperature.get("*", 1.0)) * rendered.temperature
                 shown.setdefault(b.name, {})[b.offset] = answers.temper(p, t)
@@ -307,7 +322,8 @@ class Service:
         t3 = time.perf_counter()
         ms = lambda a, b: (b - a) * 1000
         timings = {"render": ms(t0, t1), "backend": ms(t1, t2), "answer": ms(t2, t3), "total": ms(t0, t3)}
-        return response, timings, passes, len(rendered.prefix)
+        pack = (report.get("pack", "held"), len(rendered.pack)) if rendered.pack else None
+        return response, timings, passes, len(rendered.prefix), pack
 
     def models(self):
         cfg, r = self.config, self.renderer
@@ -389,7 +405,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         try:
             body = decode_body(raw, self.headers.get("Content-Encoding"), limit)
-            response, timings, passes, prefix = self.service.systemone(body)
+            response, timings, passes, prefix, pack = self.service.systemone(body)
         except RequestError as error:
             return self._send(error.status, {"detail": error.detail}, error.headers)
         except BackendError as error:
@@ -399,11 +415,11 @@ class Handler(BaseHTTPRequestHandler):
             self.log_error("internal error: %r", error)
             return self._send(500, {"detail": f"internal error: {type(error).__name__}"})
         timing = ", ".join(f"{k};dur={v:.3f}" for k, v in timings.items())
-        self._send(200, response, {
-            "Server-Timing": timing,
-            "X-SparkScore-Passes": str(passes),
-            "X-SparkScore-Prefix-Tokens": str(prefix),
-        })
+        headers = {"Server-Timing": timing, "X-SparkScore-Passes": str(passes), "X-SparkScore-Prefix-Tokens": str(prefix)}
+        if pack:
+            headers["Server-Timing"] += f", pack;desc={pack[0]}"
+            headers["X-SparkScore-Pack-Tokens"] = str(pack[1])
+        self._send(200, response, headers)
 
 
 class _Server(ThreadingHTTPServer):

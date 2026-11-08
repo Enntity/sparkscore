@@ -35,7 +35,8 @@ TypeSafe's hosted service. The differences that the code documents:
 | d3-ultra's own rules | A `choice` with an empty option key, and a `score` whose level texts are empty or repeated, are refused with 422. |
 | `zstd` bodies | Accepted only when the harness runs on Python 3.14 or later. The container's Python is older, so it answers 415; use `gzip`. |
 | `model` in the response | Always `sparkscore-d3`, even when the request names an alias. |
-| Extra headers | `Server-Timing`, `X-SparkScore-Passes` and `X-SparkScore-Prefix-Tokens`. |
+| Extra headers | `Server-Timing`, `X-SparkScore-Passes` and `X-SparkScore-Prefix-Tokens`; with `knowledge` on packs, also `X-SparkScore-Pack-Tokens` and a `pack` entry in `Server-Timing`. |
+| `knowledge` | An extension. It is not part of TypeSafe's API. |
 
 ## Routes
 
@@ -93,6 +94,7 @@ values are recorded in every run manifest under
 | `state` | yes | string, object or array | The data the questions are about. A string is shown verbatim, anything else as JSON. An empty string is shown as `(empty)`. |
 | `questions` | yes | object, at least 1 entry | Question name to question. Answers come back under the same names, in the same order. |
 | `assets` | no | must be absent or `null` | Images are not supported. |
+| `knowledge` | no | nonempty string | A SparkScore extension: text the model reads before the state, such as a policy or a handbook. See [Knowledge](#knowledge). |
 
 Other top-level fields are ignored.
 
@@ -122,6 +124,32 @@ The criteria for each type:
 Some questions are answered without the model. A `choice` with one option or
 a `score` with one level gets probability 1 for that option, as TypeSafe
 does. If no question in a request needs the model, Atlas is not called.
+
+### Knowledge
+
+`knowledge` puts text after d3-ultra's system prompt, ahead of the state, and the answers follow it. Typical
+uses are routing rules, policies and catalogs that every request on a domain shares.
+
+On an Atlas started with `--score-packs N`, the knowledge is a **pack**:
+- Atlas encodes it once and keeps its attention keys and values and its recurrent state.
+- Later requests on the same text read that state instead of recomputing it.
+- The pack is one bidirectional block that never reads the state, so it is the same for every request.
+- Atlas holds up to N packs and evicts the least recently used first. The harness re-sends an evicted
+  pack's tokens by itself.
+
+On an Atlas without packs, the knowledge is part of the state block, which gives the same answers more
+slowly.
+
+| One DGX Spark, W4A4, 40 tickets × 3 questions | p50 |
+|---|---:|
+| No knowledge | 168 ms |
+| 1.2K-token handbook in the state | 533 ms |
+| The same handbook as `knowledge` (pack) | 173 ms |
+| 12K-token handbook in the state | 5.45 s |
+| The same handbook as `knowledge` (pack) | 280 ms |
+
+Knowledge that contains one of the tokenizer's special tokens (`<|im_end|>` and the like) is refused
+with 422.
 
 ### Response
 
