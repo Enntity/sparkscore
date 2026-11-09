@@ -349,15 +349,15 @@ body { font-family: var(--body); color: var(--text); -webkit-font-smoothing: ant
 .packs .race { left: 260px; top: 200px; width: 1400px; padding: 30px 40px 36px; opacity: 0; transform: scale(0.96); transition: opacity 0.5s, transform 0.5s; z-index: 5;
   background: rgba(8, 11, 24, 0.96); }
 .packs .race.on { opacity: 1; transform: none; }
-.race .lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 18px; }
-.race .lane { padding: 26px 30px; border-radius: 18px; border: 1px solid; }
-.race .today { border-color: color-mix(in srgb, var(--amber) 55%, transparent); background: color-mix(in srgb, var(--amber) 6%, transparent); }
-.race .ours { border-color: color-mix(in srgb, var(--violet) 70%, transparent); background: color-mix(in srgb, var(--violet) 10%, transparent); box-shadow: 0 0 40px color-mix(in srgb, var(--violet) 30%, transparent); }
+.race .rlanes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 18px; }
+.race .rlane { padding: 26px 30px; border-radius: 18px; border: 1px solid; }
+.race .rtoday { border-color: color-mix(in srgb, var(--amber) 55%, transparent); background: color-mix(in srgb, var(--amber) 6%, transparent); }
+.race .rours { border-color: color-mix(in srgb, var(--violet) 70%, transparent); background: color-mix(in srgb, var(--violet) 10%, transparent); box-shadow: 0 0 40px color-mix(in srgb, var(--violet) 30%, transparent); }
 .race .lname { font-size: 34px; font-weight: 700; color: #fff; }
 .race .lhow { font-size: 20px; color: #9aa6d4; margin-top: 4px; }
 .race .lbig { font-family: var(--mono); font-size: 76px; font-weight: 700; margin: 18px 0 10px; }
-.race .today .lbig { color: var(--amber); }
-.race .ours .lbig { color: var(--violet); text-shadow: 0 0 24px var(--violet); }
+.race .rtoday .lbig { color: var(--amber); }
+.race .rours .lbig { color: var(--violet); text-shadow: 0 0 24px var(--violet); }
 .race .lbig small { font-family: var(--sans, inherit); font-size: 20px; font-weight: 400; color: #9aa6d4; margin-left: 14px; }
 .race .lstat { font-size: 24px; color: #dfe6ff; margin-top: 6px; }
 .race .lstat b { font-family: var(--mono); color: #fff; }

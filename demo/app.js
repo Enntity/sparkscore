@@ -827,7 +827,7 @@ async function scenePacks() {
   // 2. Without it.
   showTicket(hero, "Ticket");
   caption("Without the handbook, the model <b>can't know the house rules</b>", "one ticket, three questions: team · urgency · legal", 0);
-  H.mode("No handbook");
+  H.mode("Without");
   const none = await systemOne("packs-none", D.state(hero), D.questions);
   showAnswers(hero, none, false);
   H.ms(ms0(none.server), "ms");
@@ -836,7 +836,7 @@ async function scenePacks() {
   // 3. In every request.
   showTicket(hero, "Ticket");
   caption("<b>Today</b>: the handbook goes in every request", "d3 reads it together with each ticket, so no prefix cache can reuse it: 12K tokens recomputed per ticket", 0);
-  H.mode("Today: in request");
+  H.mode("Today");
   hb.classList.add("scan");
   timer(true);
   const inReq = await systemOne("packs-in-request", `${text}\n\n${D.state(hero)}`, D.questions);
@@ -861,7 +861,8 @@ async function scenePacks() {
   await sleep(3400);
 
   // 5. Every ticket on the pack, for as long as one in-request ticket took.
-  H.mode("Knowledge pack");
+  H.mode("Pack");
+  $("#timer").classList.remove("on");
   showTicket(hero, "Ticket");
   const first = await systemOne("packs", D.state(hero), D.questions, { knowledge_name: D.name });
   showAnswers(hero, first);
@@ -883,12 +884,12 @@ async function scenePacks() {
   }
   timer(false);
   const p50 = Stats.pct(times, 0.5);
-  const lane = (cls, name, how, per, n, ok, of) => `<div class="lane ${cls}"><div class="lname">${name}</div><div class="lhow">${how}</div>
+  const lane = (cls, name, how, per, n, ok, of) => `<div class="rlane ${cls}"><div class="lname">${name}</div><div class="lhow">${how}</div>
     <div class="lbig">${per}<small>per ticket</small></div><div class="lstat"><b>${n}</b> ticket${n === 1 ? "" : "s"} in ${(inReq.server / 1000).toFixed(1)} s</div>
     <div class="lstat"><b>${ok}/${of}</b> house rules followed</div></div>`;
-  const race = el("div", "panel race", `<div class="eyebrow">Same tickets · same engine · same DGX Spark</div><div class="lanes">
-    ${lane("today", "Today", "handbook in every request", `${(inReq.server / 1000).toFixed(2)} s`, 1, todayOk, hero.rules.length)}
-    ${lane("ours", "Knowledge pack", "handbook read once", `${ms0(p50)} ms`, tally.tickets, tally.ok, tally.n)}</div>`);
+  const race = el("div", "panel race", `<div class="eyebrow">Same tickets · same engine · same DGX Spark</div><div class="rlanes">
+    ${lane("rtoday", "Today", "handbook in every request", `${(inReq.server / 1000).toFixed(2)} s`, 1, todayOk, hero.rules.length)}
+    ${lane("rours", "Knowledge pack", "handbook read once", `${ms0(p50)} ms`, tally.tickets, tally.ok, tally.n)}</div>`);
   root.append(race);
   await sleep(50); race.classList.add("on");
   caption(`<b>${Math.round(inReq.server / p50)}× faster</b> per ticket, with the same house rules followed`, `12K-token handbook · p50 ${ms0(p50)} ms on a pack vs ${ms0(inReq.server)} ms in the request`, 0);
