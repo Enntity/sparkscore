@@ -128,16 +128,59 @@ went to the engine as one score request.
 | `./start.sh --precision w4a8` | Serve the W4A8 alternative. |
 | `BIND=0.0.0.0 ./start.sh serve` | Serve on your network. Set `SPARKSCORE_API_KEY` to require a bearer key. |
 | `python3 demo/serve.py` | Open the live demo at http://127.0.0.1:8780. |
+| `KNOWLEDGE_DIR=~/handbooks ./start.sh` | Load every `*.md` / `*.txt` there as named knowledge (see below). |
+| `PACKS=0 ./start.sh` | Turn knowledge packs off (default: up to 8 held). |
 
-The demo has four scenes:
+The demo has five scenes:
 - inbox triage;
 - a guardrail that checks an agent's tool calls against a written policy;
 - live review of a reply as you type;
-- twelve decisions about an insurance claim file in one pass.
+- twelve decisions about an insurance claim file in one pass;
+- a 12K-token support handbook as a knowledge pack: every ticket follows its house rules at full speed.
 
 All their data is fictional, and all timings are live.
 
 <p align="center"><img src="docs/assets/demo-claims.gif" alt="Insurance claim files scored at full speed: twelve typed decisions per file in one engine pass, about half a second per file" width="80%"></p>
+
+## Knowledge packs
+
+Most decisions depend on your own rules: a routing policy, a refund policy, a support handbook. Give
+SparkScore the document once and every request follows it, at almost the cost of a request without it.
+
+```bash
+# Register a document by name (or put it in KNOWLEDGE_DIR before ./start.sh).
+curl -s -X PUT http://127.0.0.1:8015/v1/knowledge/acme-handbook \
+  -H 'content-type: application/json' --data "$(jq -Rs '{text: .}' handbook.md)"
+
+# Use it by name.
+curl -s http://127.0.0.1:8015/v1/systemone -H 'content-type: application/json' -d '{
+  "model": "sparkscore-d3",
+  "knowledge_name": "acme-handbook",
+  "state": "Ticket from Diego at Ferro (customer tier: Kestrel): \"Please switch our Helios payment method to bank transfer.\"",
+  "questions": {"team": {"type": "choice", "instructions": "Which team should handle this ticket?",
+                         "criteria": {"billing": "Billing", "infrastructure": "Infrastructure", "sales": "Sales"}}}
+}'
+```
+
+The engine encodes the document once, as a **knowledge pack**: its attention keys and its recurrent state. Every
+request on it reads that state in place and never recomputes the document. A request can also send the text
+itself as `"knowledge"`; the pack is built on first use and held for later requests.
+
+| One DGX Spark, 40 tickets × 3 questions | House rules followed | p50 |
+|---|---:|---:|
+| No handbook | 6/35 | 167 ms |
+| 1.2K-token handbook in every request | 35/35 | 533 ms |
+| The same handbook as a knowledge pack | **35/35** | **165 ms** |
+| 12K-token handbook in every request | 35/35 | 5.43 s |
+| The same handbook as a knowledge pack | **35/35** | **191 ms** |
+
+Receipts are in [results/2026-11-08-knowledge-packs](results/2026-11-08-knowledge-packs/RESULT.md), and the
+research behind the feature is in [docs/paperlets/knowledge-packs.md](docs/paperlets/knowledge-packs.md).
+
+Details:
+- **API:** `knowledge`, `knowledge_name` and `/v1/knowledge` are in [docs/API.md](docs/API.md#knowledge).
+- **Packs held:** Atlas holds up to 8 packs by default (`PACKS` changes it) and evicts the least recently used
+  first. The harness re-sends an evicted pack by itself.
 
 ## How it works
 
@@ -180,6 +223,9 @@ The details, the cost model and the roofline are in
 - **Calibration.** The readout temperatures are fitted on held-out kev data.
   For your own task, check calibration on your own labels before choosing
   thresholds (`tools/sparkscore/calibrate.py`).
+- **Knowledge packs.** A pack is one block that never reads the ticket, which is a small change to d3's
+  attention. Its answers match the knowledge in the request on 117 of 120 questions at 1.2K, 3.3K and 12K
+  tokens. Each held pack keeps one of the engine's 32 sequence slots.
 - **Precision.** W4A4 shifts d3-ultra's probabilities slightly against its
   BF16 runtime: mean KL 0.015 on a 49-question reference set, with the same
   answer on 47 of 49. If you need the closest match to BF16, use
@@ -188,10 +234,11 @@ The details, the cost model and the roofline are in
 ## The engine
 
 The score path and kernels are proposed upstream as an Atlas pull request
-([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). Until it merges, SparkScore builds Atlas from the
+([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). Knowledge packs and their attention kernel
+are not part of that pull request yet. Until it merges, SparkScore builds Atlas from the
 [`Enntity/atlas`](https://github.com/Enntity/atlas) branch named in
-[install/atlas-source.json](install/atlas-source.json). Once it merges,
-`install/repin.sh` moves the pin to Atlas-Inf, and nothing else changes.
+[install/atlas-source.json](install/atlas-source.json). Once the score path and
+knowledge packs are both upstream, `install/repin.sh` moves the pin to Atlas-Inf, and nothing else changes.
 
 ## Repository
 

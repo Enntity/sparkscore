@@ -3,6 +3,7 @@
 
     python3 demo/record.py inbox guard typing claims title:intro title:outro
     python3 demo/record.py --montage
+    python3 demo/record.py title:s5 packs title:packs --cut knowledge-packs   # the knowledge-pack feature video
 
 Needs demo/serve.py running (default http://127.0.0.1:8780) and Python
 Playwright. Frames come from a CDP screencast at high JPEG quality and are
@@ -28,7 +29,7 @@ ENCODE = ["-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-crf", "1
           "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-movflags", "+faststart"]
 
 
-async def capture(url, frames_dir, tail_ms=700, timeout_s=90):
+async def capture(url, frames_dir, tail_ms=700, timeout_s=180):
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
@@ -104,7 +105,7 @@ def record(name, base):
         warm(base)
     query = f"scene={scene}&autoplay=1&lead=400" + (f"&card={card}" if card else "")
     if scene == "title":
-        query += "&hold=" + ("5200" if card == "outro" else "3600")
+        query += "&hold=" + ("5200" if card in ("outro", "packs") else "3600")
     out_path = os.path.join(OUT, f"{scene}-{card}.mp4" if card else f"{scene}.mp4")
     with tempfile.TemporaryDirectory(prefix="sparkscore-frames-") as tmp:
         frames, calls = asyncio.run(capture(f"{base}/?{query}", tmp))
@@ -115,16 +116,23 @@ def record(name, base):
     print(f"{out_path}: {dur:.1f}s, {len(frames)} frames captured ({len(frames) / span:.1f}/s), {len(calls)} live calls")
 
 
-# The montage: (clip, start s, end s) cut from the recorded clips, each with a
-# short fade, joined with dips to black.
-MONTAGE = [
-    ("title-intro", 0.0, None),
-    ("inbox", 0.0, 19.5),
-    ("guard", 0.0, 16.5),
-    ("typing", 4.5, None),
-    ("claims", 1.0, 22.0),
-    ("title-outro", 0.0, None),
-]
+# Cuts: (clip, start s, end s) from the recorded clips, each with a short
+# fade, joined with dips to black.
+CUTS = {
+    "montage": [
+        ("title-intro", 0.0, None),
+        ("inbox", 0.0, 19.5),
+        ("guard", 0.0, 16.5),
+        ("typing", 4.5, None),
+        ("claims", 1.0, 22.0),
+        ("title-outro", 0.0, None),
+    ],
+    "knowledge-packs": [
+        ("title-s5", 0.0, None),
+        ("packs", 0.0, None),
+        ("title-packs", 0.0, None),
+    ],
+}
 
 
 def probe(path):
@@ -133,17 +141,18 @@ def probe(path):
     return float(out.stdout)
 
 
-def montage():
+def montage(cut="montage"):
+    clips = CUTS[cut]
     inputs, parts = [], []
-    for k, (clip, start, end) in enumerate(MONTAGE):
+    for k, (clip, start, end) in enumerate(clips):
         path = os.path.join(OUT, f"{clip}.mp4")
         end = probe(path) if end is None else end
         d = end - start
         inputs += ["-i", path]
         parts.append(f"[{k}:v]trim=start={start}:end={end},setpts=PTS-STARTPTS,"
                      f"fade=t=in:st=0:d=0.3,fade=t=out:st={d - 0.35:.3f}:d=0.35[v{k}]")
-    graph = ";".join(parts) + ";" + "".join(f"[v{k}]" for k in range(len(MONTAGE))) + f"concat=n={len(MONTAGE)}:v=1:a=0,format=yuv420p[out]"
-    out_path = os.path.join(OUT, "sparkscore-montage.mp4")
+    graph = ";".join(parts) + ";" + "".join(f"[v{k}]" for k in range(len(clips))) + f"concat=n={len(clips)}:v=1:a=0,format=yuv420p[out]"
+    out_path = os.path.join(OUT, f"sparkscore-{cut}.mp4")
     subprocess.run([FFMPEG, "-y", "-loglevel", "error", *inputs, "-filter_complex", graph, "-map", "[out]", "-r", str(FPS), *ENCODE, out_path], check=True)
     print(f"{out_path}: {probe(out_path):.1f}s")
 
@@ -153,12 +162,15 @@ def main():
     ap.add_argument("scenes", nargs="*")
     ap.add_argument("--base", default="http://127.0.0.1:8780")
     ap.add_argument("--montage", action="store_true", help="cut the montage from recorded clips")
+    ap.add_argument("--cut", choices=sorted(CUTS), help="cut a named sequence from recorded clips")
     args = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     for name in args.scenes:
         record(name, args.base)
     if args.montage:
         montage()
+    if args.cut:
+        montage(args.cut)
 
 
 if __name__ == "__main__":

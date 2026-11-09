@@ -22,9 +22,10 @@ TOP_LOGPROBS = 20  # Atlas clamps completion logprobs to 20
 
 
 class BackendError(Exception):
-    def __init__(self, message, status=502):
+    def __init__(self, message, status=502, upstream=None):
         super().__init__(message)
         self.status = status
+        self.upstream = upstream  # the engine's own HTTP status, when it answered
 
 
 def _softmax(logprobs):
@@ -77,7 +78,7 @@ class _Http:
             # 529: every slot busy. 422: the engine refused this request (for
             # example, a single question longer than one score pass). 502: anything else.
             status = 529 if response.status in (429, 503, 529) else 422 if response.status in (400, 413, 422) else 502
-            raise BackendError(f"backend HTTP {response.status}: {payload[:300]!r}", status)
+            raise BackendError(f"backend HTTP {response.status}: {payload[:300]!r}", status, response.status)
         try:
             return json.loads(payload)
         except ValueError as error:
@@ -190,17 +191,58 @@ class VllmBackend:
 
 
 class ScoreBackend:
+    """Atlas's `/v1/score`. Knowledge packs: the first request on a pack sends its tokens and Atlas encodes
+    them once; later ones send the `pack_id` it answered with (the tokens again if Atlas no longer holds
+    it). An Atlas without packs gets the pack as the start of the prefix instead (the same tokens, read as
+    part of the state)."""
+
     name = "score"
+    packs = True
 
     def __init__(self, base_url, timeout=600.0, attention=None):
         self.http = _Http(base_url, timeout)
         self.attention = attention
+        self.pack_ids = {}  # pack tokens (tuple) -> Atlas pack id
+        self.lock = threading.Lock()
 
-    def score(self, prefix, branches, options):
+    def _post_pack(self, body, pack, report):
+        key = tuple(pack)
+        with self.lock:
+            known = self.pack_ids.get(key)
+        if known is not None:
+            try:
+                response = self.http.post("/v1/score", dict(body, pack_id=known))
+                report["pack"] = response.get("pack", "held") if isinstance(response, dict) else "held"
+                return response
+            except BackendError as error:
+                if error.upstream != 404:
+                    raise
+                with self.lock:
+                    self.pack_ids.pop(key, None)
+        try:
+            response = self.http.post("/v1/score", dict(body, pack=pack))
+        except BackendError as error:
+            # Atlas refuses packs it was not started for, naming the flag (`--score-packs N`).
+            if error.upstream != 422 or not any(s in str(error) for s in ("--score-packs", "packs are off")):
+                raise
+            report["pack"] = "off"
+            return self.http.post("/v1/score", dict(body, prefix=pack + body["prefix"]))
+        if isinstance(response, dict) and isinstance(response.get("pack_id"), str):
+            with self.lock:
+                if len(self.pack_ids) >= 64:
+                    self.pack_ids.pop(next(iter(self.pack_ids)))
+                self.pack_ids[key] = response["pack_id"]
+            report["pack"] = response.get("pack", "built")
+        return response
+
+    def score(self, prefix, branches, options, pack=None, report=None):
         body = {"prefix": prefix, "branches": branches, "options": options}
         if self.attention:
             body["attention"] = self.attention
-        response = self.http.post("/v1/score", body)
+        if pack:
+            response = self._post_pack(body, pack, report if report is not None else {})
+        else:
+            response = self.http.post("/v1/score", body)
         probs = response.get("probs") if isinstance(response, dict) else None
         if not isinstance(probs, list) or len(probs) != len(branches):
             raise BackendError("backend returned the wrong number of branches")

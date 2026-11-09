@@ -55,10 +55,13 @@ class Rendered:
     # depends on the number of questions); the server's --temperature
     # multiplies it.
     temperature: float = 1.0
+    # A knowledge pack (templates.d3_ultra): tokens before the prefix that the
+    # engine holds, so the prefix continues them. Empty: none.
+    pack: list = field(default_factory=list)
 
     @property
     def input_tokens(self):
-        return len(self.prefix) + sum(len(b.ids) for b in self.branches)
+        return len(self.pack) + len(self.prefix) + sum(len(b.ids) for b in self.branches)
 
 
 # Option rotations, as KnowLine's knowline_layout.py (PelaAI, Apache-2.0)

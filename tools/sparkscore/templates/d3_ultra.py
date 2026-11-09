@@ -204,10 +204,11 @@ def messages(state, question, codes, header=None):
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_prompt(state, question, codes, header)}]
 
 
-def state_end_char(text, state):
-    """Character offset in a rendered prompt where the state segment ends."""
+def state_end_char(text, state, after=0):
+    """Character offset in a rendered prompt where the state segment ends (searched from `after`: past the
+    system turn, so knowledge there cannot be mistaken for the state)."""
     body = describe(state) if state not in (None, "") else "(empty)"
-    start = text.find(STATE_MARK + body + QUESTION_MARK)
+    start = text.find(STATE_MARK + body + QUESTION_MARK, after)
     if start < 0:
         raise ValueError("rendered prompt has no state segment followed by the question block")
     return start + len(STATE_MARK) + len(body)
@@ -295,20 +296,66 @@ class Renderer:
         if scaffold.count(slot) != 1:
             raise ValueError("chat template dropped or repeated the user turn")
         self.head, self.tail = scaffold.split(slot)
+        # Special tokens (turn markers and the like), not every added token: plain text may name <tool_call>.
+        added = getattr(self.hf, "added_tokens_decoder", {}) or {}
+        self.special = sorted({t for t in self.hf.all_special_tokens if t} | {a.content for a in added.values() if a.special})
+        self._knowledge = {}  # knowledge text -> (head, end of the knowledge in it, its pack tokens)
+
+    def knowledge_head(self, knowledge):
+        """The prompt head with `knowledge` after d3's system prompt, the character offset where the
+        knowledge ends in it, and the head's tokens up to there (the knowledge pack). Knowledge holding a
+        special token is refused: it would open or close a turn. Trailing whitespace is dropped, as d3's
+        chat template trims the system turn."""
+        knowledge = knowledge.rstrip()
+        if knowledge in self._knowledge:
+            return self._knowledge[knowledge]
+        if any(t in knowledge for t in self.special):
+            raise Unsupported("knowledge must not contain the tokenizer's special tokens")
+        system = SYSTEM_PROMPT + "\n\n" + knowledge
+        slot = f"D3_{uuid.uuid4().hex}"
+        scaffold = _chat_text(self.hf, [{"role": "system", "content": system}, {"role": "user", "content": slot}])
+        if scaffold.count(slot) != 1 or scaffold.count(system) != 1:
+            raise ValueError("chat template dropped or repeated the system or user turn")
+        head, tail = scaffold.split(slot)
+        if tail != self.tail:
+            raise ValueError("knowledge changed the chat template's closing text")
+        end = head.index(system) + len(system)
+        pack_ids = self._encode(head[:end])["input_ids"]
+        rest = self._encode(head[end:])["input_ids"]
+        if self._encode(head)["input_ids"] != pack_ids + rest or not rest or rest[0] not in self.hf.all_special_ids:
+            pack_ids = []  # the knowledge's end does not fall on a token boundary: no pack, in-prefix only
+        entry = (head, end, pack_ids)
+        if len(self._knowledge) >= 16:
+            self._knowledge.pop(next(iter(self._knowledge)))
+        self._knowledge[knowledge] = entry
+        return entry
 
     def _encode(self, texts, offsets=False):
         return self.hf(texts, add_special_tokens=False, return_offsets_mapping=offsets)
 
-    def _split(self, text, state, encoded):
+    def _split(self, text, state, encoded, after=0):
         """d3's encode_split: (state block, question block) of one whole prompt."""
         ids = encoded["input_ids"]
-        n = state_token_count(encoded["offset_mapping"], state_end_char(text, state))
+        n = state_token_count(encoded["offset_mapping"], state_end_char(text, state, after))
         if n >= len(ids):
             raise ValueError("prompt has no question tokens after the state segment")
         return ids[:n], ids[n:]
 
-    def render(self, state, questions):
-        """questions: {name: question} as validated by the server."""
+    def render(self, state, questions, knowledge=None, pack=False):
+        """questions: {name: question} as validated by the server. `knowledge`: text after d3's system
+        prompt (a policy, a handbook). With `pack`, its tokens (the prompt's tokens up to the end of the
+        knowledge) are returned apart as `Rendered.pack` and the prefix starts after them, for an engine
+        that holds the pack (`ScoreBackend`); without, the knowledge is part of the prefix."""
+        head, kend, pack_ids = self.knowledge_head(knowledge) if knowledge else (self.head, 0, [])
+        if pack and pack_ids:
+            # The pack ends where the system turn's closing special token starts, and the tokenizer splits
+            # at special tokens first, so the rest of the prompt tokenizes the same on its own: only the
+            # text after the knowledge is tokenized per request.
+            rest = self._render(state, questions, head[kend:])
+            return Rendered(rest.prefix, rest.branches, temperature=rest.temperature, pack=pack_ids)
+        return self._render(state, questions, head)
+
+    def _render(self, state, questions, head):
         normal = {name: normalize_question(q) for name, q in questions.items()}
         header = [rendered for rendered, _ in normal.values() if rendered is not None]
         rows = []  # (name, offset, shown question): one branch each
@@ -320,18 +367,18 @@ class Renderer:
                     rows.append((name, REVERSED, flipped))
         prefix, pieces = [], []
         if rows:
-            texts = [self.head + user_prompt(state, q, self.labels, header) + self.tail for _, _, q in rows]
+            texts = [head + user_prompt(state, q, self.labels, header) + self.tail for _, _, q in rows]
             first = self._encode(texts[0], offsets=True)
-            prefix, question = self._split(texts[0], state, first)
+            prefix, question = self._split(texts[0], state, first, len(head))
             # Every prompt is the same text up to "Question:" (cut), where the pre-tokenizer starts a piece.
             body = _EMPTY_STATE if state is None or state == "" else describe(state)
-            cut = len(self.head) + len("\n".join(header_lines(header) + ["State:", body])) + 2
+            cut = len(head) + len("\n".join(header_lines(header) + ["State:", body])) + 2
             starts = [start for start, _ in first["offset_mapping"]]
             m = starts.index(cut) if cut in starts else -1
             bridge = first["input_ids"][len(prefix):m]
             pieces = [bridge + t for t in self._encode([t[cut:] for t in texts])["input_ids"]]
             if m < len(prefix) or pieces[0] != question:
-                split = [self._split(t, state, e) for t, e in zip(texts, self._whole(texts))]
+                split = [self._split(t, state, e, len(head)) for t, e in zip(texts, self._whole(texts))]
                 if any(p != prefix for p, _ in split):
                     raise ValueError("the questions of a request have different state blocks")
                 pieces = [q for _, q in split]

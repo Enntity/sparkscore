@@ -12,19 +12,21 @@ SparkScore serves. All of it is Atlas code.
 ## Where the code is
 
 - **Pin:** `install/atlas-source.json` pins the engine: `Enntity/atlas`, branch
-  `upstream/systemone-score-20261105`, commit `b594151da`, built on Atlas-Inf
-  `main` at `999bfc48d`. `install/build.sh` fetches exactly that commit and
+  `sparkscore/score-packs-20261108`, commit `2d26979c0`. It is the score path at
+  `b594151da` (built on Atlas-Inf `main` at `999bfc48d`) plus knowledge packs and
+  their attention kernel. `install/build.sh` fetches exactly that commit and
   checks its git tree.
 - **Target:** `gb10 / qwen3.8-27b / nvfp4`. d3-ultra is a Qwen3.8-27B
   fine-tune: 64 layers, 16 with full attention and 48 with Gated DeltaNet
   (GDN), hidden size 5120.
-- **Upstream:** the work is proposed upstream in Atlas-Inf/atlas
-  ([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). When it merges, `install/repin.sh` moves the pin.
+- **Upstream:** the score path is proposed upstream in Atlas-Inf/atlas
+  ([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)); knowledge packs are not yet. When it merges, `install/repin.sh` moves the pin.
 - **Measured builds:** most measurements on this page are from `6e8c06a44`.
-  The pinned commit adds an L2 evict-first hint on the W8A8 GDN weight copies
+  `b594151da` adds an L2 evict-first hint on the W8A8 GDN weight copies
   and the review fixes. `results/2026-11-07-release-replication` reruns the
   headline checks at the pin. Its answers are identical, and its engine times
-  are within 1% in an interleaved A/B.
+  are within 1% in an interleaved A/B. The pack attention kernel (below) gives
+  bit-identical output for every request without a long pack.
 
 ## Why one pass
 
@@ -189,6 +191,45 @@ branches of 40 tokens each:
 | 1 | 201 ms | 202 ms | 1 | 0 |
 | 4 | 729 ms | 731 ms | 3 | 0 |
 | 16 | 2,448 ms | 2,984 ms | 6 | 0 |
+
+## Knowledge packs
+
+A knowledge pack is a token block that requests continue without recomputing it: a policy or a handbook
+(`crates/spark-model/src/model/trait_impl/prefill_b/score_pack.rs`).
+
+- **Build.** One score pass over the pack's P tokens, as one bidirectional block under `prefix_bidir`. Atlas keeps
+  that pass's sequence instead of freeing it: its KV blocks, and its SSM slot holding the GDN state and conv
+  window after the last token.
+- **Request.** A request on a pack is planned at positions shifted by P (`score_plan.rs`). A stream that reads
+  the pack directly (the request's head, or a branch without one):
+  - shares the pack's whole KV blocks by reference count;
+  - copies the pack's partial last block into a block it owns;
+  - enters the GDN layers from the pack's state through the pass's pointer tables. The single-launch scan and
+    conv1d read it in place, so no state is copied.
+  - Branches share their head's blocks and fork from it as before.
+- **Mask.** The state block's `state_end` now spans the pack, so the state and question blocks read the pack's
+  keys. The pack never reads anything after it. No kernel changes.
+- **Holding.** Packs are content-addressed by their tokens and attention mode. `--score-packs N` bounds how many
+  are held, evicting the least recently used after a new one is built. Each pack keeps one SSM slot, so the
+  scheduler admits that many fewer sequences.
+- **API.** `/v1/score` takes `"pack": [ids]` or `"pack_id"`, answers with `"pack_id"` and
+  `"pack": "built" | "held"`, and answers 404 for an id it no longer holds.
+
+**Attention over long keys.** Score streams are short (a ~240-row state, ~20-row branches), so per-head 32-row
+attention tiles ran at about 10 TFLOPS however long the keys. Score passes now use 128-row tiles holding one KV
+head's six query heads (`prefill_paged_rows128.cu`, `_gqa`), so every K/V tile is shared and the output is
+bit-identical. A stream with more than 4,096 keys and at least 4 keys a row (a pack under a short state) splits
+each tile's key range across a 2-CTA cluster, combined through distributed shared memory (`_gqa_split2`); split rows
+are within one bf16 ulp. The rule reads each stream alone, so a merged pass still scores as each request alone.
+
+| Pack tokens | p50, pack | p50, knowledge in the state | p50, no knowledge |
+|---:|---:|---:|---:|
+| 1,179 | 165 ms | 533 ms | 167 ms |
+| 3,272 | 155 ms | 1,317 ms | — |
+| 12,051 | 191 ms | 5,432 ms | — |
+
+Attention over the 16 full-attention layers, microbenchmarked at d3's geometry: 16.6 → 5.1 ms on a 1.2K pack,
+143 → 32 ms on a 12K pack, 1,040 → 212 ms for eight 12K-pack requests merged (results/2026-11-08-knowledge-packs).
 
 ## Dense 27B prefill kernels
 

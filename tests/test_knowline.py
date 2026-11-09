@@ -254,7 +254,7 @@ class KnowLine(_Base, unittest.TestCase):
                 backend = Peaked()
                 service = server.Service(self.renderer(rotations=mode), backend, server.Config())
                 body = {"model": "sparkscore-latest", "state": "Customer: it broke.", "questions": questions}
-                response, _, passes, prefix_tokens = service.systemone(body)
+                response, _, passes, prefix_tokens, _ = service.systemone(body)
                 self.assertEqual(passes, calls)
                 self.assertEqual([len(c[1]) for c in backend.calls], branches)
                 self.assertTrue(all(c[0] == backend.calls[0][0] for c in backend.calls))

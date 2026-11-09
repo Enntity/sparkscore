@@ -35,7 +35,8 @@ TypeSafe's hosted service. The differences that the code documents:
 | d3-ultra's own rules | A `choice` with an empty option key, and a `score` whose level texts are empty or repeated, are refused with 422. |
 | `zstd` bodies | Accepted only when the harness runs on Python 3.14 or later. The container's Python is older, so it answers 415; use `gzip`. |
 | `model` in the response | Always `sparkscore-d3`, even when the request names an alias. |
-| Extra headers | `Server-Timing`, `X-SparkScore-Passes` and `X-SparkScore-Prefix-Tokens`. |
+| Extra headers | `Server-Timing`, `X-SparkScore-Passes` and `X-SparkScore-Prefix-Tokens`; with `knowledge` on packs, also `X-SparkScore-Pack-Tokens` and a `pack` entry in `Server-Timing`. |
+| `knowledge`, `knowledge_name`, `/v1/knowledge` | Extensions. They are not part of TypeSafe's API. |
 
 ## Routes
 
@@ -44,6 +45,9 @@ TypeSafe's hosted service. The differences that the code documents:
 | `POST /v1/systemone` | bearer key, if set | One answer per question. |
 | `GET /v1/models` | bearer key, if set | The model names. |
 | `GET /v1/limits` | bearer key, if set | This deployment's limits. |
+| `GET /v1/knowledge` | bearer key, if set | The named knowledge documents. |
+| `PUT /v1/knowledge/NAME` | bearer key, if set | Register (or replace) a named document: `{"text": "..."}`. Its pack is built before the answer. |
+| `DELETE /v1/knowledge/NAME` | bearer key, if set | Forget a named document. |
 | `GET /health` | none | `{"status": "ok"}` once the harness is up. `./start.sh` starts the harness only after Atlas is healthy. |
 
 Any other path is 404 with `{"detail": "Not Found"}`.
@@ -93,6 +97,8 @@ values are recorded in every run manifest under
 | `state` | yes | string, object or array | The data the questions are about. A string is shown verbatim, anything else as JSON. An empty string is shown as `(empty)`. |
 | `questions` | yes | object, at least 1 entry | Question name to question. Answers come back under the same names, in the same order. |
 | `assets` | no | must be absent or `null` | Images are not supported. |
+| `knowledge` | no | nonempty string | A SparkScore extension: text the model reads before the state, such as a policy or a handbook. See [Knowledge](#knowledge). |
+| `knowledge_name` | no | string | A SparkScore extension: a document registered with `PUT /v1/knowledge/NAME` or loaded at startup, used instead of `knowledge`. Unknown names answer 422. |
 
 Other top-level fields are ignored.
 
@@ -122,6 +128,56 @@ The criteria for each type:
 Some questions are answered without the model. A `choice` with one option or
 a `score` with one level gets probability 1 for that option, as TypeSafe
 does. If no question in a request needs the model, Atlas is not called.
+
+### Knowledge
+
+`knowledge` puts text after d3-ultra's system prompt, ahead of the state, and the answers follow it. Typical
+uses are routing rules, policies and catalogs that every request on a domain shares.
+
+On an Atlas started with `--score-packs N`, the knowledge is a **pack**:
+- Atlas encodes it once and keeps its attention keys and values and its recurrent state.
+- Later requests on the same text read that state instead of recomputing it.
+- The pack is one bidirectional block that never reads the state, so it is the same for every request.
+- Atlas holds up to N packs and evicts the least recently used first. The harness re-sends an evicted
+  pack's tokens by itself.
+
+**Granularity:**
+- **Per request.** Each request names its own knowledge, or none. Requests on different packs share the
+  engine's passes and score exactly as they would alone.
+- **One pack per request.** To combine documents, register them as one document. Text specific to one
+  request belongs in the state.
+- **A pack is its exact text.** Any edit makes a new pack. The first request on it pays for the encode (5.7 s
+  for 12K tokens on one DGX Spark), and every later request reads it. Trailing whitespace is dropped, as d3's
+  chat template drops it.
+- **Capacity.** Each held pack keeps one of the engine's 32 sequence slots, so the default of 8 packs leaves 24
+  for concurrent requests.
+
+On an Atlas without packs, the knowledge is part of the state block, which gives the same answers more
+slowly.
+
+| One DGX Spark, W4A4, 40 tickets × 3 questions | p50 |
+|---|---:|
+| No knowledge | 167 ms |
+| 1.2K-token handbook in the state | 533 ms |
+| The same handbook as `knowledge` (pack) | 165 ms |
+| 12K-token handbook in the state | 5.43 s |
+| The same handbook as `knowledge` (pack) | 191 ms |
+
+Knowledge that contains one of the tokenizer's special tokens (`<|im_end|>` and the like) is refused
+with 422.
+
+**Named knowledge.** For a document many requests share, register it once and use its name:
+- **Register:** `PUT /v1/knowledge/acme-handbook` with `{"text": "..."}` answers
+  `{"name", "chars", "pack_tokens", "pack": "built" | "held" | "off"}` once the pack is built.
+- **Use:** requests send `"knowledge_name": "acme-handbook"` instead of the text.
+- **Rules:** names are 1–64 letters, digits, `.`, `_` or `-`, and the library holds up to 64 documents.
+  Registered documents last until the server stops.
+- **At startup:** `KNOWLEDGE_DIR=~/handbooks ./start.sh` loads every `*.md` and `*.txt` file there by its
+  file name, and builds their packs before the server answers. On a bare harness, use `--knowledge NAME=PATH`
+  or `--knowledge-dir DIR`.
+
+`X-SparkScore-Pack-Tokens` and the `pack` entry of `Server-Timing` (`built`, `held` or `off`) say how a request
+used its pack.
 
 ### Response
 

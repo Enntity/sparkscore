@@ -15,7 +15,9 @@
 #
 # Settings (environment or .env): MODEL_ROOT (default ~/models/sparkscore),
 # PORT (8015), BIND (127.0.0.1; 0.0.0.0 to serve your network), IMAGE (a
-# specific image), SPARKSCORE_API_KEY (bearer key).
+# specific image), SPARKSCORE_API_KEY (bearer key), KNOWLEDGE_DIR (a folder of
+# *.md / *.txt documents, usable by name as knowledge_name, their packs built at
+# startup), PACKS (knowledge packs held, default 8; 0 turns them off).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 if [[ -f .env ]]; then set -a; . ./.env; set +a; fi
@@ -49,6 +51,7 @@ serve() {
   docker run -d --name "$NAME" --gpus all --ipc=host --restart unless-stopped \
     -p "$BIND:$PORT:8015" -v "$model:/model:ro" \
     ${SPARKSCORE_API_KEY:+-e SPARKSCORE_API_KEY} ${PRECISION:+-e SPARKSCORE_PRECISION=$PRECISION} \
+    ${PACKS:+-e SPARKSCORE_PACKS=$PACKS} ${KNOWLEDGE_DIR:+-v "$(cd "$KNOWLEDGE_DIR" && pwd):/knowledge:ro"} \
     "$(image)" >/dev/null
   say "waiting for the model to load (about a minute)"
   for _ in $(seq 1 600); do

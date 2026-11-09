@@ -323,3 +323,41 @@ body { font-family: var(--body); color: var(--text); -webkit-font-smoothing: ant
 /* While a slowed-down ticket is being scored, the previous ticket's answers fade out. */
 .insp .qblock, .insp #ims { transition: opacity 0.25s; }
 .insp.scan .qblock, .insp.scan #ims { opacity: 0.12; }
+
+/* ------------------------------------------------------------ 5. knowledge packs */
+.packs .hb { left: 40px; top: 132px; width: 900px; height: 672px; padding: 22px 26px; display: flex; flex-direction: column; }
+.packs .hb pre { flex: 1; margin: 14px 0 0; overflow: hidden; white-space: pre-wrap; font-family: var(--mono); font-size: 15px; line-height: 1.5; color: #9aa6d4; }
+.packs .hb .rule { color: #fff; background: color-mix(in srgb, var(--amber) 22%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 55%, transparent); border-radius: 4px; }
+.hbchip { font-family: var(--mono); font-size: 16px; color: var(--amber); }
+.packbadge { position: absolute; left: 26px; right: 26px; bottom: 20px; padding: 14px 18px; border-radius: 14px; font-size: 20px; color: #dfe6ff;
+  background: rgba(10, 14, 30, 0.85); border: 1px solid color-mix(in srgb, var(--violet) 60%, transparent); box-shadow: 0 0 26px color-mix(in srgb, var(--violet) 45%, transparent);
+  opacity: 0; transform: translateY(12px); transition: opacity 0.5s, transform 0.5s; }
+.packbadge b { color: var(--violet); letter-spacing: 1.5px; }
+.packs .hb.packed .packbadge { opacity: 1; transform: none; }
+.packs .hb.packed { border-color: color-mix(in srgb, var(--violet) 55%, transparent); box-shadow: 0 0 40px color-mix(in srgb, var(--violet) 25%, transparent); }
+.packs .tk { left: 970px; top: 132px; width: 910px; height: 672px; padding: 24px 28px; }
+.packs .tk .ttext { height: 92px; }
+.timer { position: absolute; right: 28px; top: 78px; font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--amber); text-shadow: 0 0 20px var(--amber); opacity: 0; transition: opacity 0.3s; }
+.timer.on { opacity: 1; }
+.arow { position: relative; padding: 10px 14px 12px; border-radius: 14px; border: 1px solid transparent; transition: border-color 0.3s, background 0.3s; }
+.arow .rbadge { margin-left: 12px; font-family: var(--mono); font-size: 15px; color: var(--amber); }
+.arow .mark { position: absolute; right: 16px; top: 6px; font-size: 30px; font-weight: 700; }
+.arow.ok { border-color: color-mix(in srgb, var(--green) 55%, transparent); background: color-mix(in srgb, var(--green) 7%, transparent); }
+.arow.ok .mark { color: var(--green); text-shadow: 0 0 14px var(--green); }
+.arow.bad { border-color: color-mix(in srgb, var(--red) 55%, transparent); background: color-mix(in srgb, var(--red) 8%, transparent); }
+.arow.bad .mark { color: var(--red); text-shadow: 0 0 14px var(--red); }
+.packs .race { left: 260px; top: 200px; width: 1400px; padding: 30px 40px 36px; opacity: 0; transform: scale(0.96); transition: opacity 0.5s, transform 0.5s; z-index: 5;
+  background: rgba(8, 11, 24, 0.96); }
+.packs .race.on { opacity: 1; transform: none; }
+.race .rlanes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 18px; }
+.race .rlane { padding: 26px 30px; border-radius: 18px; border: 1px solid; }
+.race .rtoday { border-color: color-mix(in srgb, var(--amber) 55%, transparent); background: color-mix(in srgb, var(--amber) 6%, transparent); }
+.race .rours { border-color: color-mix(in srgb, var(--violet) 70%, transparent); background: color-mix(in srgb, var(--violet) 10%, transparent); box-shadow: 0 0 40px color-mix(in srgb, var(--violet) 30%, transparent); }
+.race .lname { font-size: 34px; font-weight: 700; color: #fff; }
+.race .lhow { font-size: 20px; color: #9aa6d4; margin-top: 4px; }
+.race .lbig { font-family: var(--mono); font-size: 76px; font-weight: 700; margin: 18px 0 10px; }
+.race .rtoday .lbig { color: var(--amber); }
+.race .rours .lbig { color: var(--violet); text-shadow: 0 0 24px var(--violet); }
+.race .lbig small { font-family: var(--sans, inherit); font-size: 20px; font-weight: 400; color: #9aa6d4; margin-left: 14px; }
+.race .lstat { font-size: 24px; color: #dfe6ff; margin-top: 6px; }
+.race .lstat b { font-family: var(--mono); color: #fff; }

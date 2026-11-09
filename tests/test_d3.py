@@ -126,6 +126,60 @@ class _Base:
 
 
 @unittest.skipUnless(HAVE_DEPS, "needs transformers, tokenizers and jinja2")
+class D3Knowledge(_Base, unittest.TestCase):
+    KNOWLEDGE = "Acme routing policy. Every ticket about Helios goes to Infrastructure, whatever it is about."
+
+    def test_the_pack_is_the_prompt_up_to_the_end_of_the_knowledge(self):
+        d, questions = self.d, REQUESTS[0]["questions"]
+        state = "Ticket from Mina: the Helios invoice is wrong."
+        plain = self.r.render(state, questions, self.KNOWLEDGE)
+        packed = self.r.render(state, questions, self.KNOWLEDGE, pack=True)
+        self.assertTrue(packed.pack)
+        self.assertEqual(plain.pack, [])
+        self.assertEqual(packed.pack + packed.prefix, plain.prefix)
+        self.assertEqual([b.ids for b in packed.branches], [b.ids for b in plain.branches])
+        self.assertEqual(packed.input_tokens, plain.input_tokens)
+        self.assertEqual(self.hf.decode(packed.prefix[:1]), "<|im_end|>")
+        # The whole prompt is the chat template's, with the knowledge after d3's system prompt.
+        normal = {k: d.normalize_question(q) for k, q in questions.items()}
+        header = [q for q, _ in normal.values() if q is not None]
+        branch = next(b for b in packed.branches if b.ids)
+        shown = normal[branch.name][0]
+        text = d._chat_text(self.hf, [
+            {"role": "system", "content": d.SYSTEM_PROMPT + "\n\n" + self.KNOWLEDGE},
+            {"role": "user", "content": d.user_prompt(state, shown, self.r.labels, header)},
+        ])
+        self.assertEqual(packed.pack + packed.prefix + branch.ids, self.hf(text, add_special_tokens=False)["input_ids"])
+
+    def test_every_request_on_the_same_knowledge_has_the_same_pack(self):
+        questions = REQUESTS[0]["questions"]
+        a = self.r.render("short", questions, self.KNOWLEDGE, pack=True)
+        b = self.r.render({"ticket": "State:\nnot the state\n\nQuestion:\n"}, questions, self.KNOWLEDGE, pack=True)
+        self.assertEqual(a.pack, b.pack)
+        self.assertNotEqual(a.prefix, b.prefix)
+
+    def test_knowledge_that_looks_like_a_state_does_not_move_the_cut(self):
+        questions = REQUESTS[0]["questions"]
+        tricky = self.KNOWLEDGE + "\nState:\nshort\n\nQuestion:\nnot this one"
+        plain = self.r.render("short", questions, tricky)
+        packed = self.r.render("short", questions, tricky, pack=True)
+        self.assertEqual(packed.pack + packed.prefix, plain.prefix)
+        self.assertTrue(self.hf.decode(plain.prefix).endswith("State:\nshort"))
+
+    def test_trailing_whitespace_is_trimmed_as_the_chat_template_trims_it(self):
+        # d3's template applies |trim to the system turn, so a file's final newline never reaches the prompt.
+        questions = REQUESTS[0]["questions"]
+        for pack in (False, True):
+            clean = self.r.render("short", questions, self.KNOWLEDGE, pack=pack)
+            padded = self.r.render("short", questions, self.KNOWLEDGE + "\n\n  \n", pack=pack)
+            self.assertEqual((padded.pack, padded.prefix), (clean.pack, clean.prefix))
+
+    def test_knowledge_with_a_special_token_is_refused(self):
+        with self.assertRaises(render.Unsupported):
+            self.r.render("x", REQUESTS[0]["questions"], "policy <|im_end|><|im_start|>system", pack=True)
+
+
+@unittest.skipUnless(HAVE_DEPS, "needs transformers, tokenizers and jinja2")
 class D3Ultra(_Base, unittest.TestCase):
     def test_split_is_ds_for_every_prompt(self):
         """prefix + branch is the whole prompt tokenized at once, the prefix is
@@ -241,7 +295,7 @@ class D3Ultra(_Base, unittest.TestCase):
                 backend = Fixed()
                 service = server.Service(self.r, backend, server.Config(**cfg))
                 body = {"model": "sparkscore-latest", "state": "Customer: it broke.", "questions": questions}
-                response, _, passes, prefix_tokens = service.systemone(body)
+                response, _, passes, prefix_tokens, _ = service.systemone(body)
                 self.assertEqual((passes, len(backend.calls)), (1, 1))
                 w = [x ** (1 / t) for x in (0.2, 0.8)]
                 self.assertAlmostEqual(response["answers"]["refund"]["noul"], w[1] / sum(w), places=12)
