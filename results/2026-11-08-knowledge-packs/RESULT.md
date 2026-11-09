@@ -70,6 +70,26 @@ integrations, macros and known issues.
 | 3,272 | 35/35 | 35/35 | 117/120 | 1,333 ms | **175 ms** |
 | 12,051 | 35/35 | 35/35 | 114/120 | 5,452 ms | **280 ms** |
 
+## With the long-key attention kernel
+
+Atlas `2d26979c0`, the commit SparkScore pins, adds GQA-packed 128-row attention tiles for score passes, plus a
+2-CTA key split for streams with more than 4,096 keys. Same sets, scripts and flags; p50 at the client:
+
+| Case | No knowledge | Knowledge in state | Pack |
+|---|---:|---:|---:|
+| handbook (1,179 pack tokens) | 167.2 ms | 532.5 ms | **164.9 ms** |
+| rules4 (140 pack tokens) | 168.3 ms | 184.3 ms | **163.0 ms** |
+| 3,272 pack tokens | — | 1,317 ms | **155 ms** |
+| 12,051 pack tokens | — | 5,432 ms | **191 ms** |
+
+- **Accuracy:** every row of the accuracy table above is unchanged: 35/35 and 128/128 rules, 117/120 and
+  324/336 argmax, mean KL 0.0151 and 0.0379. Both long handbooks keep 35/35 rules, and pack vs in-state argmax is
+  117/120 at 3.3K and 12K (114 at 12K before).
+- **Merging:** eight pack requests in flight still score exactly as alone (max |Δp| 0.000000).
+- **Attention microbenchmark,** 16 layers at d3's geometry: 1.2K pack 16.6 → 5.1 ms, 12K pack 143 → 32 ms, eight
+  12K-pack requests merged 1,040 → 212 ms, no pack 3.8 → 1.5 ms.
+- **Requests without knowledge** got slightly faster, and their output is bit-identical.
+
 ## Engine checks
 
 - **Unit tests:** `cargo test -p spark-model --lib score_plan` (7, including 4 new pack-geometry tests) and

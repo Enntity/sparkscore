@@ -146,11 +146,11 @@ slowly.
 
 | One DGX Spark, W4A4, 40 tickets × 3 questions | p50 |
 |---|---:|
-| No knowledge | 168 ms |
+| No knowledge | 167 ms |
 | 1.2K-token handbook in the state | 533 ms |
-| The same handbook as `knowledge` (pack) | 173 ms |
-| 12K-token handbook in the state | 5.45 s |
-| The same handbook as `knowledge` (pack) | 280 ms |
+| The same handbook as `knowledge` (pack) | 165 ms |
+| 12K-token handbook in the state | 5.43 s |
+| The same handbook as `knowledge` (pack) | 191 ms |
 
 Knowledge that contains one of the tokenizer's special tokens (`<|im_end|>` and the like) is refused
 with 422.

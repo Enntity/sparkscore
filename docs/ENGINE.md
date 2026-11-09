@@ -12,19 +12,21 @@ SparkScore serves. All of it is Atlas code.
 ## Where the code is
 
 - **Pin:** `install/atlas-source.json` pins the engine: `Enntity/atlas`, branch
-  `upstream/systemone-score-20261105`, commit `b594151da`, built on Atlas-Inf
-  `main` at `999bfc48d`. `install/build.sh` fetches exactly that commit and
+  `sparkscore/score-packs-20261108`, commit `2d26979c0`. It is the score path at
+  `b594151da` (built on Atlas-Inf `main` at `999bfc48d`) plus knowledge packs and
+  their attention kernel. `install/build.sh` fetches exactly that commit and
   checks its git tree.
 - **Target:** `gb10 / qwen3.8-27b / nvfp4`. d3-ultra is a Qwen3.8-27B
   fine-tune: 64 layers, 16 with full attention and 48 with Gated DeltaNet
   (GDN), hidden size 5120.
-- **Upstream:** the work is proposed upstream in Atlas-Inf/atlas
-  ([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). When it merges, `install/repin.sh` moves the pin.
+- **Upstream:** the score path is proposed upstream in Atlas-Inf/atlas
+  ([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)); knowledge packs are not yet. When it merges, `install/repin.sh` moves the pin.
 - **Measured builds:** most measurements on this page are from `6e8c06a44`.
-  The pinned commit adds an L2 evict-first hint on the W8A8 GDN weight copies
+  `b594151da` adds an L2 evict-first hint on the W8A8 GDN weight copies
   and the review fixes. `results/2026-11-07-release-replication` reruns the
   headline checks at the pin. Its answers are identical, and its engine times
-  are within 1% in an interleaved A/B.
+  are within 1% in an interleaved A/B. The pack attention kernel (below) gives
+  bit-identical output for every request without a long pack.
 
 ## Why one pass
 
@@ -213,8 +215,21 @@ A knowledge pack is a token block that requests continue without recomputing it:
 - **API.** `/v1/score` takes `"pack": [ids]` or `"pack_id"`, answers with `"pack_id"` and
   `"pack": "built" | "held"`, and answers 404 for an id it no longer holds.
 
-On a 1,179-token handbook, a request costs 174 ms p50 on its pack against 169 ms with no handbook. The extra time
-is attention over the pack's keys in the 16 full-attention layers (results/2026-11-08-knowledge-packs).
+**Attention over long keys.** Score streams are short (a ~240-row state, ~20-row branches), so per-head 32-row
+attention tiles ran at about 10 TFLOPS however long the keys. Score passes now use 128-row tiles holding one KV
+head's six query heads (`prefill_paged_rows128.cu`, `_gqa`), so every K/V tile is shared and the output is
+bit-identical. A stream with more than 4,096 keys and at least 4 keys a row (a pack under a short state) splits
+each tile's key range across a 2-CTA cluster, combined through distributed shared memory (`_gqa_split2`); split rows
+are within one bf16 ulp. The rule reads each stream alone, so a merged pass still scores as each request alone.
+
+| Pack tokens | p50, pack | p50, knowledge in the state | p50, no knowledge |
+|---:|---:|---:|---:|
+| 1,179 | 165 ms | 533 ms | 167 ms |
+| 3,272 | 155 ms | 1,317 ms | — |
+| 12,051 | 191 ms | 5,432 ms | — |
+
+Attention over the 16 full-attention layers, microbenchmarked at d3's geometry: 16.6 → 5.1 ms on a 1.2K pack,
+143 → 32 ms on a 12K pack, 1,040 → 212 ms for eight 12K-pack requests merged (results/2026-11-08-knowledge-packs).
 
 ## Dense 27B prefill kernels
 

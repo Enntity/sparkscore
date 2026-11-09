@@ -835,13 +835,13 @@ async function scenePacks() {
 
   // 3. In every request.
   showTicket(hero, "Ticket");
-  caption("Put the handbook <b>in the request</b>: right, but it is read every time", "12K tokens recomputed for every ticket", 0);
-  H.mode("Handbook in request");
+  caption("<b>Today</b>: the handbook goes in every request", "d3 reads it together with each ticket, so no prefix cache can reuse it: 12K tokens recomputed per ticket", 0);
+  H.mode("Today: in request");
   hb.classList.add("scan");
   timer(true);
   const inReq = await systemOne("packs-in-request", `${text}\n\n${D.state(hero)}`, D.questions);
   timer(false); hb.classList.remove("scan");
-  showAnswers(hero, inReq, false);
+  const todayOk = showAnswers(hero, inReq, false);
   H.ms(ms0(inReq.server), "ms");
   H.tok(inReq.tokens.toLocaleString("en-US"));
   await sleep(3800);
@@ -883,8 +883,16 @@ async function scenePacks() {
   }
   timer(false);
   const p50 = Stats.pct(times, 0.5);
-  caption(`<b>${tally.tickets} tickets</b> in the time <b>1</b> took · ${tally.ok}/${tally.n} house rules followed`, `12K-token handbook · p50 ${ms0(p50)} ms on a pack vs ${ms0(inReq.server)} ms in the request · one DGX Spark`, 0);
-  await sleep(5200);
+  const lane = (cls, name, how, per, n, ok, of) => `<div class="lane ${cls}"><div class="lname">${name}</div><div class="lhow">${how}</div>
+    <div class="lbig">${per}<small>per ticket</small></div><div class="lstat"><b>${n}</b> ticket${n === 1 ? "" : "s"} in ${(inReq.server / 1000).toFixed(1)} s</div>
+    <div class="lstat"><b>${ok}/${of}</b> house rules followed</div></div>`;
+  const race = el("div", "panel race", `<div class="eyebrow">Same tickets · same engine · same DGX Spark</div><div class="lanes">
+    ${lane("today", "Today", "handbook in every request", `${(inReq.server / 1000).toFixed(2)} s`, 1, todayOk, hero.rules.length)}
+    ${lane("ours", "Knowledge pack", "handbook read once", `${ms0(p50)} ms`, tally.tickets, tally.ok, tally.n)}</div>`);
+  root.append(race);
+  await sleep(50); race.classList.add("on");
+  caption(`<b>${Math.round(inReq.server / p50)}× faster</b> per ticket, with the same house rules followed`, `12K-token handbook · p50 ${ms0(p50)} ms on a pack vs ${ms0(inReq.server)} ms in the request`, 0);
+  await sleep(6400);
   caption("<b>Knowledge packs</b>: your rulebook, read once", "knowledge_name in /v1/systemone · Atlas --score-packs", 0);
   await sleep(3600);
   done();
@@ -899,7 +907,7 @@ const CARDS = {
   s2: { kicker: "02", h1: "Agent Guardrail", h2: "Check every tool call <b>before it runs</b>", facts: ["against a written policy", "inside the agent loop"] },
   s3: { kicker: "03", h1: "Live as you type", h2: "Decisions that keep up with the keyboard", facts: ["5 questions per update", "one request in flight"] },
   s4: { kicker: "04", h1: "Many questions, one pass", h2: "12 typed decisions per document", facts: ["one request per file", "one engine pass"] },
-  packs: { kicker: "Knowledge packs", h1: "Your rulebook, read once", h2: "12K-token handbook: <b>280 ms</b> a ticket, not 5.5 s",
+  packs: { kicker: "Knowledge packs", h1: "Your rulebook, read once", h2: "12K-token handbook: <b>191 ms</b> a ticket, not 5.4 s",
     facts: ["same answers as the handbook in the request", "PUT /v1/knowledge/NAME · knowledge_name", "Atlas --score-packs · one DGX Spark"],
     foot: "Measured on one DGX Spark (results/2026-11-08-knowledge-packs). The scene's own timings are live." },
   s5: { kicker: "05", h1: "Knowledge packs", h2: "A 12K-token handbook, <b>read once</b>", facts: ["register a document by name", "every request reads it in place", "same answers as in the request"] },

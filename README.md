@@ -168,11 +168,11 @@ itself as `"knowledge"`; the pack is built on first use and held for later reque
 
 | One DGX Spark, 40 tickets × 3 questions | House rules followed | p50 |
 |---|---:|---:|
-| No handbook | 6/35 | 169 ms |
-| 1.2K-token handbook in every request | 35/35 | 538 ms |
-| The same handbook as a knowledge pack | **35/35** | **174 ms** |
-| 12K-token handbook in every request | 35/35 | 5.45 s |
-| The same handbook as a knowledge pack | **35/35** | **280 ms** |
+| No handbook | 6/35 | 167 ms |
+| 1.2K-token handbook in every request | 35/35 | 533 ms |
+| The same handbook as a knowledge pack | **35/35** | **165 ms** |
+| 12K-token handbook in every request | 35/35 | 5.43 s |
+| The same handbook as a knowledge pack | **35/35** | **191 ms** |
 
 Receipts are in [results/2026-11-08-knowledge-packs](results/2026-11-08-knowledge-packs/RESULT.md), and the
 research behind the feature is in [docs/paperlets/knowledge-packs.md](docs/paperlets/knowledge-packs.md).
@@ -224,8 +224,8 @@ The details, the cost model and the roofline are in
   For your own task, check calibration on your own labels before choosing
   thresholds (`tools/sparkscore/calibrate.py`).
 - **Knowledge packs.** A pack is one block that never reads the ticket, which is a small change to d3's
-  attention. Its answers match the knowledge in the request on 117 of 120 questions at 1.2K and 3.3K tokens,
-  and 114 of 120 at 12K. Each held pack keeps one of the engine's 32 sequence slots.
+  attention. Its answers match the knowledge in the request on 117 of 120 questions at 1.2K, 3.3K and 12K
+  tokens. Each held pack keeps one of the engine's 32 sequence slots.
 - **Precision.** W4A4 shifts d3-ultra's probabilities slightly against its
   BF16 runtime: mean KL 0.015 on a 49-question reference set, with the same
   answer on 47 of 49. If you need the closest match to BF16, use
@@ -234,11 +234,11 @@ The details, the cost model and the roofline are in
 ## The engine
 
 The score path and kernels are proposed upstream as an Atlas pull request
-([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). Knowledge packs are on the `Enntity/atlas`
-branch only. Until it merges, SparkScore builds Atlas from the
+([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). Knowledge packs and their attention kernel
+are not part of that pull request yet. Until it merges, SparkScore builds Atlas from the
 [`Enntity/atlas`](https://github.com/Enntity/atlas) branch named in
-[install/atlas-source.json](install/atlas-source.json). Once it merges,
-`install/repin.sh` moves the pin to Atlas-Inf, and nothing else changes.
+[install/atlas-source.json](install/atlas-source.json). Once the score path and
+knowledge packs are both upstream, `install/repin.sh` moves the pin to Atlas-Inf, and nothing else changes.
 
 ## Repository
 

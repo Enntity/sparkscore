@@ -92,7 +92,8 @@ python3 $S/g5_long.py                                                           
 Expected:
 - rules 35/35 and 128/128 on packs;
 - merged vs alone max |Δp| 0.000000;
-- p50 about 174 ms on the 1.2K pack, against about 538 ms in the state.
+- p50 about 165 ms on the 1.2K pack, against about 533 ms in the state;
+- p50 about 155 ms at 3.3K and 191 ms at 12K pack tokens (`g5_long.py`).
 
 ## What can differ
 

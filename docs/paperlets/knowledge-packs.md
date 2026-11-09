@@ -27,8 +27,8 @@ The same experiments pointed to a better object to move: the prompt's own intern
   handbook.
 - **Knowledge packs.** We built this into the Atlas inference engine. A pack is encoded once, and every later
   request reads its attention keys and recurrent state without recomputing them.
-- **Speed.** On one DGX Spark, a 1.2K-token handbook costs 174 ms per request against 538 ms with the handbook in
-  the request, and 169 ms with no handbook. At 12K tokens: 280 ms against 5.45 s.
+- **Speed.** On one DGX Spark, a 1.2K-token handbook costs 165 ms per request against 533 ms with the handbook in
+  the request, and 167 ms with no handbook. At 12K tokens: 191 ms against 5.43 s.
 
 ## 1. Background
 
@@ -173,7 +173,7 @@ The fuller handbook does not over-apply. How knowledge is written matters as muc
   - its streams share the pack's whole KV blocks and copy the partial last one;
   - their entry GDN state and conv window are the pack's, read in place through the pointer tables, so no state is
     copied.
-- **No kernel change.** The state block's mask now spans the pack.
+- **No mask kernel change.** The state block's mask now spans the pack.
 - **Holding packs:** content-addressed and evicted least recently used first. Each pack holds one SSM slot, so the
   scheduler admits that many fewer sequences.
 - **Using them:** SparkScore exposes them as `knowledge` (text) or `knowledge_name` (a registered document).
@@ -188,19 +188,28 @@ The fuller handbook does not over-apply. How knowledge is written matters as muc
 The in-state baseline's own W4A4 error on the 4-rule set is about the same (0.034). Requests on a pack merged into
 one pass score exactly as they do alone.
 
-**Speed.** p50 per request (40 tickets × 3 questions):
+**Speed.** p50 per request (40 tickets × 3 questions), with the attention kernel below:
 
 | Pack tokens | Knowledge in the request | Knowledge pack | No knowledge |
 |---:|---:|---:|---:|
-| 140 | 185 ms | 164 ms | 170 ms |
-| 1,179 | 538 ms | 174 ms | 169 ms |
-| 3,272 | 1,333 ms | 175 ms | — |
-| 12,051 | 5,452 ms | 280 ms | — |
+| 140 | 184 ms | 163 ms | 168 ms |
+| 1,179 | 533 ms | 165 ms | 167 ms |
+| 3,272 | 1,317 ms | 155 ms | — |
+| 12,051 | 5,432 ms | 191 ms | — |
 
 A pack request computes fewer rows than a request with no knowledge, because d3's system prompt lives in the pack.
 So a short pack is faster than none. What a long pack does cost is attention over its keys in the 16 full-attention
-layers, which ran at only 13–35 TFLOPS against the GPU's 108 TFLOPS BF16 peak. [Long-key attention kernel: results
-to be added.]
+layers, which ran at only 13–35 TFLOPS against the GPU's 108 TFLOPS BF16 peak: before the kernel below, a 1.2K pack cost
+174 ms and a 12K pack 280 ms.
+
+**A long-key attention kernel.** Score streams are short, so their attention ran per-head 32-row tiles at about
+10 TFLOPS whatever the key length. The kernel packs one KV head's six query heads into each 128-row tile, which
+shares every K/V tile and is bit-identical. A stream with more than 4,096 keys and at least 4 keys a row splits its
+key range across a 2-CTA cluster, within one bf16 ulp. Because the split rule reads only the stream's own lengths,
+merged passes still score exactly as alone. Attention over a 12K pack fell from 143 to 32 ms, and the request from
+280 to 191 ms. Accuracy is unchanged: 35/35 and 128/128 rules, and at 12K the pack now agrees with the in-request
+answer on 117/120 questions (114 before). Of the remaining 24 ms at 12K, the kernel runs at about 45 TFLOPS, half
+of peak.
 
 ## 6. Discussion
 
@@ -230,7 +239,7 @@ For a scoring service, packs win on every axis we measured.
 - **Small weight-edit study:** one model (d3-ultra), at most four rules in one circuit, and 12 rule cases per
   test.
 - **Long packs:** past 12K tokens, the isolated-prefix equivalence is untested; at 12K the pack agrees with
-  in-state on 114/120 answers.
+  in-state on 117/120 answers.
 - **Isolation can change answers.** Barring the knowledge from reading the ticket is a change to d3's mask, and on
   terse policies it shifts some answers (urgency kept 7/66 against 2/66).
 
