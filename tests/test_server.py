@@ -455,7 +455,7 @@ class Knowledge(ServerTest):
         self.assertEqual(self.backend.calls, [])
 
     def test_knowledge_must_be_a_nonempty_string(self):
-        for bad in ("", 5, ["x"]):
+        for bad in ("", " \n ", 5, ["x"]):
             status, body, _ = post(self.port, dict(request(refund=NOUL), knowledge=bad))
             self.assertEqual(status, 422)
             self.assertEqual(body["detail"][0]["loc"], ["body", "knowledge"])
@@ -527,6 +527,15 @@ class NamedKnowledge(ServerTest):
         self.assertEqual(send(self.port, "PUT", "/v1/knowledge/ok", {"text": "Policy."})[0], 200)
         self.assertEqual(send(self.port, "DELETE", "/v1/knowledge/ok")[0], 200)
         self.assertEqual(send(self.port, "DELETE", "/v1/knowledge/ok")[0], 404)
+
+    def test_a_server_fault_while_registering_answers_500(self):
+        def broken(*args, **kwargs):
+            raise ValueError("a template invariant broke")
+
+        self.service.renderer.render = broken
+        status, body, _ = send(self.port, "PUT", "/v1/knowledge/acme", {"text": "Policy."})
+        self.assertEqual(status, 500, body)
+        self.assertIn("internal error", body["detail"])
 
     def test_startup_documents_load_from_a_directory_and_specs(self):
         import tempfile

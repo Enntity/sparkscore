@@ -181,7 +181,7 @@ def validate(body, config):
     if body.get("assets") is not None:
         error(["assets"], "assets (images) are not supported by this model", "unsupported", None)
     knowledge, knowledge_name = body.get("knowledge"), body.get("knowledge_name")
-    if knowledge is not None and (not isinstance(knowledge, str) or not knowledge):
+    if knowledge is not None and (not isinstance(knowledge, str) or not knowledge.strip()):
         error(["knowledge"], "Input should be a nonempty string", "string_type", knowledge)
     if knowledge_name is not None and not isinstance(knowledge_name, str):
         error(["knowledge_name"], "Input should be a valid string", "string_type", knowledge_name)
@@ -436,6 +436,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(error.status, {"detail": error.detail}, error.headers)
         except BackendError as error:
             return self._send(error.status, {"detail": str(error)})
+        except Exception as error:  # a server fault, never a client error
+            self.log_error("internal error: %r", error)
+            return self._send(500, {"detail": f"internal error: {type(error).__name__}"})
 
     def do_PUT(self):
         if not self.path.split("?", 1)[0].startswith("/v1/knowledge/"):

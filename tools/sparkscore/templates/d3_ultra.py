@@ -304,7 +304,9 @@ class Renderer:
     def knowledge_head(self, knowledge):
         """The prompt head with `knowledge` after d3's system prompt, the character offset where the
         knowledge ends in it, and the head's tokens up to there (the knowledge pack). Knowledge holding a
-        special token is refused: it would open or close a turn."""
+        special token is refused: it would open or close a turn. Trailing whitespace is dropped, as d3's
+        chat template trims the system turn."""
+        knowledge = knowledge.rstrip()
         if knowledge in self._knowledge:
             return self._knowledge[knowledge]
         if any(t in knowledge for t in self.special):
