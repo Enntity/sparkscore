@@ -141,6 +141,17 @@ On an Atlas started with `--score-packs N`, the knowledge is a **pack**:
 - Atlas holds up to N packs and evicts the least recently used first. The harness re-sends an evicted
   pack's tokens by itself.
 
+**Granularity:**
+- **Per request.** Each request names its own knowledge, or none. Requests on different packs share the
+  engine's passes and score exactly as they would alone.
+- **One pack per request.** To combine documents, register them as one document. Text specific to one
+  request belongs in the state.
+- **A pack is its exact text.** Any edit makes a new pack. The first request on it pays for the encode (5.7 s
+  for 12K tokens on one DGX Spark), and every later request reads it. Trailing whitespace is dropped, as d3's
+  chat template drops it.
+- **Capacity.** Each held pack keeps one of the engine's 32 sequence slots, so the default of 8 packs leaves 24
+  for concurrent requests.
+
 On an Atlas without packs, the knowledge is part of the state block, which gives the same answers more
 slowly.
 

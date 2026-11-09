@@ -211,7 +211,47 @@ merged passes still score exactly as alone. Attention over a 12K pack fell from 
 answer on 117/120 questions (114 before). Of the remaining 24 ms at 12K, the kernel runs at about 45 TFLOPS, half
 of peak.
 
-## 6. Discussion
+## 6. What people do today
+
+A decision service with a domain handbook has five options without packs. None of them reuses the handbook
+across requests on a model like d3.
+
+**The handbook in every request.** This is the documented practice:
+- **Jev:** TypeSafe's docs say Jev is not fine-tuned or adapted with customer data. Reference material goes in
+  the state, and rules go in each question's instructions and criteria. Every input token is billed on every
+  call, with no cached rate [6].
+- **d3:** its own API takes only the state and the questions [7].
+- **Cost:** the handbook is recomputed for every ticket: 5.43 s per ticket at 12K tokens on one Spark (§5).
+
+**A prompt cache.** Prefix caching works because in a causal model a token's state depends only on the tokens
+before it. Under `prefix_bidir` the handbook sits in the state block and reads the ticket:
+- **Mixing:** the first full-attention layer mixes the ticket into every handbook token, so every deeper layer
+  differs per ticket.
+- **What stays the same:** only the three Gated DeltaNet layers before that one, which are cheap.
+- **Serving projects agree:**
+  - vLLM's proposal for caching d3-family requests stops every cache hit at the end of the bidirectional
+    block. It reuses the state for more questions about the same ticket, not across tickets [8].
+  - oMLX's decision cache leaves d3 out because of its non-causal attention [9].
+
+**A causal decision model with ordinary caching.** This works, and oMLX does it for causal decision models [9].
+It gives up the bidirectional read that d3 was trained for: d3 scored with a causal mask drifts about seven
+times further from its own answers (mean KL 0.039 against 0.0055).
+
+**Per-customer fine-tuning.**
+- **Jev:** not offered [6].
+- **d3:** its weights are open, so it is possible. It needs labeled examples for every rule and a training run
+  for every edit, and the result approximates the rules rather than following the text.
+- **Closed-form edits:** these interfere past a few rules (§3.4).
+
+**Isolated blocks in causal models.** Block-Attention [10] encodes retrieved passages in isolation so their
+states can be reused, and it needed fine-tuning to recover accuracy.
+
+**What a pack changes.** A pack changes one thing in the mask: the knowledge block no longer reads the ticket,
+while the ticket and the questions still read it. That makes the handbook's state the same for every request,
+so it is built once (5.7 s for 12K tokens) and read by every later request. d3 needs no retraining for it:
+rules 35/35, and 117/120 answers match the in-request version.
+
+## 7. Discussion
 
 **Read before you write.** The failed edit (§3.1) and the working one (§3.3) differ only in what we learned by
 reading the model: where the rule acts, and where the trigger is visible. That is the lesson of weight-space
@@ -231,7 +271,7 @@ document. They are not edits to existing matrices. A weight circuit remains usef
 
 For a scoring service, packs win on every axis we measured.
 
-## 7. Limitations
+## 8. Limitations
 
 - **Synthetic tasks:** the tasks are synthetic routing, urgency and legal rules on support tickets, tested on
   held-out templates. We did not measure JevBench, kev or Decision Index with packs, because a pack is attached
@@ -243,7 +283,7 @@ For a scoring service, packs win on every axis we measured.
 - **Isolation can change answers.** Barring the knowledge from reading the ticket is a change to d3's mask, and on
   terse policies it shifts some answers (urgency kept 7/66 against 2/66).
 
-## 8. Reproducing
+## 9. Reproducing
 
 - **Weight-edit and isolation experiments:** `experiments/wsp-d3-20261108` (scripts and every output). They run on
   d3's own BF16 runtime.
@@ -260,3 +300,10 @@ For a scoring service, packs win on every axis we measured.
    Exploring "Weight-Space Programming".* arXiv:2611.08070, 2026.
 5. K. Meng, A. S. Sharma, A. Andonian, Y. Belinkov, D. Bau. *Mass-Editing Memory in a Transformer (MEMIT).* ICLR
    2023.
+6. TypeSafe. *Jev models: customizing Jev*; *State*. https://docs.typesafe.ai/models,
+   https://docs.typesafe.ai/concepts/state.md
+7. vLLM Semantic Router. *API docs.* https://app.vllm-sr.ai/docs
+8. G. Zamoscinski. *[RFC]: Prefix caching of Decision 3.0 `prefix_bidir` state blocks.* vllm-project/vllm#64267,
+   2026-10-28.
+9. *feat(decision): reuse prompt prefixes across /v1/systemone requests.* jundot/omlx#4586, 2026-10-15.
+10. D. Ma, Y. Wang, T. Lan. *Block-Attention for Efficient Prefilling.* ICLR 2025. arXiv:2409.15355.

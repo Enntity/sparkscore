@@ -86,6 +86,8 @@ Atlas `2d26979c0`, the commit SparkScore pins, adds GQA-packed 128-row attention
   324/336 argmax, mean KL 0.0151 and 0.0379. Both long handbooks keep 35/35 rules, and pack vs in-state argmax is
   117/120 at 3.3K and 12K (114 at 12K before).
 - **Merging:** eight pack requests in flight still score exactly as alone (max |Δp| 0.000000).
+- **Mixed packs** (`scripts/mixed_packs.py`, on the pinned SparkScore image): 24 requests alternating between the
+  handbook and rules4 packs, eight in flight, score exactly as alone (max |Δp| 0.000000).
 - **Attention microbenchmark,** 16 layers at d3's geometry: 1.2K pack 16.6 → 5.1 ms, 12K pack 143 → 32 ms, eight
   12K-pack requests merged 1,040 → 212 ms, no pack 3.8 → 1.5 ms.
 - **Requests without knowledge** got slightly faster, and their output is bit-identical.
