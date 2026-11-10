@@ -1,0 +1,33 @@
+question keys {'team': ['billing', 'infrastructure', 'sales'], 'urgency': ['0', '1', '2', '3'], 'legal': ['false', 'true']} temperature 1.0
+layouts (k0, k1, k2): {'AB': (37, 775, 1200), 'BA': (37, 463, 1200)}
+code order vs d3 answers, argmax mismatches: []
+  one-pack done (734s)
+  chain done (780s)
+  chain-base done (826s)
+  iso-composed done (872s)
+  iso-naive done (918s)
+  one-pack-rev done (964s)
+  iso-composed-rev done (1010s)
+
+condition        A rules  B rules    all no-rule team  vs in-state  mean KL  max KL
+in-state          20/20    15/15   35/35        5/5        120/120   0.0000   0.000
+in-state-rev      20/20    15/15   35/35        5/5        120/120   0.0000   0.000
+none               5/20     1/15    6/35        5/5         88/120   1.9200  15.991
+sys-bidir-d3      20/20    15/15   35/35        5/5        120/120   0.0018   0.092
+sys-bidir         20/20    15/15   35/35        5/5        120/120   0.0018   0.084
+one-pack          20/20    15/15   35/35        5/5        119/120   0.0264   1.324
+chain             20/20    15/15   35/35        5/5        116/120   0.0410   1.644
+chain-base        20/20    15/15   35/35        5/5        117/120   0.0379   1.659
+iso-composed      20/20    15/15   35/35        5/5        109/120   0.1467   3.711
+iso-naive         20/20    15/15   35/35        5/5        110/120   0.1575   4.448
+one-pack-rev      20/20    15/15   35/35        5/5        118/120   0.0214   1.038
+iso-composed-rev   20/20    15/15   35/35        5/5        112/120   0.1154   3.255
+
+runner sanity: sys-bidir (runner) vs sys-bidir (d3 logits): argmax 120/120, mean KL 9.46e-06, max KL 4.34e-04
+composition check, max |M S_A + C - scan(S_A)| / max|scan(S_A)| over GDN layers: {'iso-composed': '3.2e-03', 'iso-composed-rev': '5.3e-03'}
+iso-composed vs chain-base: argmax 110/120, mean KL 0.0848, max KL 1.390
+iso-composed vs one-pack: argmax 108/120, mean KL 0.0993, max KL 1.924
+chain vs one-pack: argmax 117/120, mean KL 0.0033, max KL 0.201
+iso-composed-rev vs iso-composed: argmax 118/120, mean KL 0.0022, max KL 0.135
+[1010s] wrote /w/d3work/wsp/combo.jsonl
+[job p1_combo.py 1010.1s]

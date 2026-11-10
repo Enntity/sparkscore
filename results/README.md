@@ -11,6 +11,8 @@ earlier one, and this index says which is current.
 
 | Result | What it measured | Status |
 |---|---|---|
+| [2026-11-10-combined-packs](2026-11-10-combined-packs/RESULT.md) | Two knowledge packs in one request, on d3's BF16 runtime: one pack, a pack tree, or packs built apart | **Current**: trees hold, packs built apart leak a rule |
+| [2026-11-08-knowledge-packs](2026-11-08-knowledge-packs/RESULT.md) | Knowledge packs on Atlas: rule accuracy, pack vs in-state, latency to 12K pack tokens, the long-key attention kernel | **Current**: the pinned engine |
 | [2026-11-07-release-replication](2026-11-07-release-replication/RESULT.md) | The documented install from a clean checkout: byte-identical weights, JevBench ×3, oracle, engine, merged vs solo, refusals | **Current**: the pinned engine |
 | [2026-11-07-d3-ultra-w4a4](2026-11-07-d3-ultra-w4a4/RESULT.md) | The default (W4A4): JevBench ×3, kev, Decision Index sample, engine sweep, concurrency, BF16 oracle | **Current** |
 | [2026-11-07-activation-formats](2026-11-07-activation-formats/RESULT.md) | Which 4-bit formats keep d3-ultra's accuracy (MXFP4, NVFP4, two-term) | Current. Its `scripts/` ran on the development setup, not `start.sh`. |
