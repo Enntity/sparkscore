@@ -130,6 +130,7 @@ went to the engine as one score request.
 | `python3 demo/serve.py` | Open the live demo at http://127.0.0.1:8780. |
 | `KNOWLEDGE_DIR=~/handbooks ./start.sh` | Load every `*.md` / `*.txt` there as named knowledge (see below). |
 | `PACKS=0 ./start.sh` | Turn knowledge packs off (default: up to 8 held). |
+| `STORE_GB=20 STORE_DIR=~/sparkscore-store STORE_DISK_GB=300 ./start.sh` | Keep every photo's encoding (20 GiB of device memory, then NVMe), so a photo asked a new question skips it. |
 
 The demo has five scenes:
 - inbox triage;
@@ -139,6 +140,11 @@ The demo has five scenes:
 - a 12K-token support handbook as a knowledge pack: every ticket follows its house rules at full speed.
 
 All their data is fictional, and all timings are live.
+
+Four image demos read photos and video through `images` in `/v1/systemone`: a camera programmed by a
+sentence, a photo library sorted by a question, a photo firehose that re-sorts hundreds of photos
+live by new questions, and a film read live, ten questions a frame. See
+[demo/IMAGES.md](demo/IMAGES.md).
 
 <p align="center"><img src="docs/assets/demo-claims.gif" alt="Insurance claim files scored at full speed: twelve typed decisions per file in one engine pass, about half a second per file" width="80%"></p>
 

@@ -1,6 +1,6 @@
 # Image demos
 
-Three pages that score images with d3-ultra on one DGX Spark through SparkScore's `/v1/systemone`
+Four pages that score images with d3-ultra on one DGX Spark through SparkScore's `/v1/systemone`
 (`images`: base64 data URLs, as d3-ultra's own server takes them).
 
 - `camera.html`: a camera programmed by a sentence. Up to four typed yes/no questions are asked of
@@ -31,23 +31,35 @@ Three pages that score images with d3-ultra on one DGX Spark through SparkScore'
     server remembers every photo it has read (the pack store), so a take that should read every photo
     fresh needs a restarted server.
 
+- `watch.html`: a film read live. Each frame the page can get answered is asked ten questions in one
+  request (`"remember": false`: a frame is read, not kept): emotion and action as distributions, the
+  setting, how many people, how tense, and five yes/no flags. The dashboard follows the film: bars, a
+  stacked emotion river over the last 30 s of film, a strip of moments (what changed, at film time), and
+  in the corner the frame the answers are about (they trail it by about half a second). Keys: `Space`
+  play / pause, `←` `→` 10 s, `1`-`6` jump to a scene, `H` hides the key line. `?src=` another video,
+  `?inflight=` frames in flight (default 2). The film is Tears of Steel (Blender Foundation,
+  mango.blender.org, CC BY 3.0): `python3 demo/videos/fetch.py` downloads it and cuts it to its story.
+  `python3 demo/record.py --take watch` records the dashboard through the six scenes (in the installed
+  Chrome, which decodes H.264 in hardware and keeps the pace while recording).
+
 ## Run
 
-The SparkScore harness needs an Atlas build with images in `/v1/score` (Enntity/atlas
-`sparkscore/score-images`). On the Spark:
+On the Spark, SparkScore with the photo library on: a 20 GiB pack store in device memory (about 400
+photos), 300 GiB of NVMe behind it, and 24 packs held. `install/atlas-source.json` pins the Atlas
+build with images in `/v1/score` and the pack store; without a published image for that pin,
+`./start.sh` builds it from source (20-40 minutes the first time):
 
-    python3 -m tools.sparkscore.server --backend score --backend-url http://127.0.0.1:8081 --backend-model m \
-      --tokenizer <d3-ultra-NVFP4 dir> --template d3-ultra --model-id sparkscore-d3 \
-      --temperature choice=1.636,noul=2.366,score=1.588 --port 8015
+    STORE_GB=20 STORE_DIR=~/sparkscore-store STORE_DISK_GB=300 PACKS=24 ./start.sh
 
 On the machine with the browser:
 
     ssh -f -N -L 18015:127.0.0.1:8015 <spark>
     python3 demo/photos/fetch.py 500        # once: COCO val2017 photos, CC BY / CC BY-SA
+    python3 demo/videos/fetch.py            # once, for watch.html: Tears of Steel, CC BY 3.0
     python3 demo/serve.py --port 8780 --upstream http://127.0.0.1:18015
 
-Then open http://localhost:8780/camera.html, http://localhost:8780/photos.html or
-http://localhost:8780/firehose.html. A browser opens six connections a host, so the image pages spread
+Then open http://localhost:8780/camera.html, http://localhost:8780/photos.html,
+http://localhost:8780/firehose.html or http://localhost:8780/watch.html. A browser opens six connections a host, so the image pages spread
 their calls over `localhost`, `s1.localhost` and `s2.localhost` (all loopback; `serve.py` answers
 them with CORS for loopback origins only).
 
@@ -56,11 +68,16 @@ them with CORS for loopback origins only).
 - Camera, 640x360 frames, 4 questions: 4.3 frames/s and ~420 ms per answer with 2 frames in flight;
   3.2 frames/s and ~250 ms with 1.
 - Photos: 120 COCO photos (~640x480), one question, in 20.1 s (6.0 photos/s).
+- Video dashboard, 640x267 frames, ten questions each: 3.0-3.7 frames/s with 2 in flight, each answer
+  ~0.6 s after its frame.
 - Firehose, fresh server: new photos stream in at ~5-6 photos/s (one every ~160 ms); re-sorting 125 or
   250 photos by a new question at 33-37 photos/s, every photo answered from memory (500 fit the
   20 GB pack store).
 
-## Photo credits
+## Credits
 
 The sample photos are COCO val2017 images under CC BY 2.0 or CC BY-SA 2.0. `photos/manifest.json`
 lists each photo's license and Flickr source, and each tile's tooltip shows them.
+
+The film in `watch.html` is Tears of Steel, (CC) Blender Foundation, mango.blender.org, under CC BY 3.0;
+the page credits it on the video.

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* The image demos (camera.html, photos.html, firehose.html): style.css's palette and stage, nothing else shared. */
+/* The image demos (camera.html, photos.html, firehose.html, watch.html): style.css's palette and stage, nothing else shared. */
 :root {
   --bg: #03040a;
   --panel: rgba(13, 17, 33, 0.82);
@@ -158,3 +158,64 @@ button.on, button:hover, .file:hover { color: var(--text); border-color: rgba(62
   background: rgba(3, 4, 10, 0.8); padding: 2px 10px; border-radius: 10px; }
 .fh-top-cell.hot { box-shadow: 0 0 0 3px var(--cyan), 0 0 22px rgba(62, 232, 255, 0.45); }
 .fh-top-cell.hot .pct { color: var(--cyan); }
+
+/* ---------------------------------------------------------------- watch (video dashboard) */
+.wt-video { position: absolute; left: 48px; top: 108px; width: 1180px; height: 512px; overflow: hidden; }
+.wt-video video { position: absolute; left: 16px; top: 12px; width: 1148px; height: 478px; background: #000; border-radius: 12px; object-fit: contain; }
+.wt-hud { position: absolute; left: 32px; top: 26px; display: flex; align-items: center; gap: 12px; padding: 6px 14px; border-radius: 999px;
+  font: 600 18px var(--mono); color: var(--text); background: rgba(3, 4, 10, 0.7); }
+.wt-scan { width: 12px; height: 12px; border-radius: 50%; background: var(--cyan); opacity: 0.25; }
+.wt-scan.on { animation: wt-flash 0.45s ease-out; }
+@keyframes wt-flash { from { opacity: 1; box-shadow: 0 0 16px var(--cyan); } to { opacity: 0.25; box-shadow: none; } }
+.wt-answered { position: absolute; right: 32px; top: 26px; width: 240px; display: flex; flex-direction: column; gap: 4px;
+  padding: 6px; border-radius: 12px; background: rgba(3, 4, 10, 0.72); border: 1px solid rgba(62, 232, 255, 0.45); }
+.wt-answered img { width: 228px; height: 95px; object-fit: cover; border-radius: 8px; display: block; background: #000; }
+.wt-answered span { font: 500 13px var(--mono); color: var(--cyan); text-align: center; }
+.wt-credit { position: absolute; right: 30px; bottom: 30px; font: 500 13px var(--mono); color: rgba(234, 240, 255, 0.6);
+  background: rgba(3, 4, 10, 0.55); padding: 3px 9px; border-radius: 6px; }
+.wt-progress { position: absolute; left: 16px; right: 16px; bottom: 9px; height: 4px; border-radius: 2px; background: rgba(130, 150, 255, 0.15); }
+.wt-progress div { height: 100%; width: 0; background: var(--cyan); border-radius: 2px; }
+.wt-head { display: flex; justify-content: space-between; align-items: baseline; font: 600 22px var(--head); color: var(--text); margin-bottom: 10px; }
+.wt-hint { font: 500 15px var(--body); color: var(--faint); }
+.wt-hint b { color: var(--text); font: 700 20px var(--head); margin-left: 6px; }
+.wt-top { font: 700 22px var(--head); color: var(--cyan); }
+.wt-river { position: absolute; left: 48px; top: 632px; width: 1180px; height: 250px; padding: 16px 24px; }
+.wt-moments { position: absolute; left: 48px; top: 894px; width: 1180px; height: 150px; padding: 16px 24px; overflow: hidden; }
+#moments { display: flex; gap: 12px; }
+.wt-moment { flex: 0 0 auto; min-width: 150px; max-width: 220px; padding: 10px 14px; border-radius: 12px; border-left: 4px solid var(--c);
+  background: rgba(20, 26, 50, 0.7); display: flex; flex-direction: column; gap: 4px; }
+.wt-moment b { font: 700 16px var(--mono); color: var(--dim); }
+.wt-moment span { font: 600 18px var(--head); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wt-moment.new { animation: pop 0.3s ease-out; box-shadow: 0 0 22px color-mix(in srgb, var(--c) 40%, transparent); }
+.wt-card { position: absolute; left: 1252px; width: 620px; padding: 16px 22px; }
+.wt-emotion { top: 108px; height: 314px; }
+.wt-action { top: 434px; height: 338px; }
+.wt-scene { top: 784px; height: 84px; }
+.wt-signals { top: 880px; height: 164px; display: flex; gap: 22px; align-items: center; }
+.wt-bars { display: flex; flex-direction: column; gap: 5px; }
+.wt-bar { display: grid; grid-template-columns: 170px 1fr 52px; align-items: center; gap: 12px; height: 26px; }
+.wt-bar .l { font: 500 17px var(--body); color: var(--dim); white-space: nowrap; }
+.wt-bar .t { height: 12px; border-radius: 6px; background: rgba(130, 150, 255, 0.12); overflow: hidden; }
+.wt-bar .t i { display: block; height: 100%; width: 0; border-radius: 6px; transition: width 0.35s ease-out; }
+.wt-bar .v { font: 600 16px var(--mono); color: var(--faint); text-align: right; }
+.wt-bar.top .l { color: var(--text); font-weight: 700; }
+.wt-bar.top .v { color: var(--text); }
+.wt-chips { display: flex; gap: 8px; }
+.wt-chip { position: relative; font: 600 16px var(--mono); color: var(--dim); padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(62, 232, 255, calc(var(--p, 0) * 0.3)); transition: background 0.35s, color 0.35s; }
+.wt-chip.on { color: var(--text); border-color: var(--cyan); }
+.wt-gauge { position: relative; width: 210px; height: 140px; flex: 0 0 auto; }
+.wt-gauge canvas { position: absolute; left: 0; top: 4px; }
+.wt-gauge-label { position: absolute; left: 0; right: 0; top: 78px; text-align: center; display: flex; flex-direction: column; }
+.wt-gauge-label b { font: 700 24px var(--head); color: var(--text); }
+.wt-gauge-label span { font: 500 14px var(--mono); color: var(--faint); text-transform: uppercase; letter-spacing: 2px; }
+.wt-flags { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.wt-flag { display: grid; grid-template-columns: 16px 1fr 48px; align-items: center; gap: 10px; font: 500 17px var(--body); color: var(--faint); }
+.wt-flag i { width: 12px; height: 12px; border-radius: 50%; background: rgba(130, 150, 255, 0.2); transition: background 0.3s, box-shadow 0.3s; }
+.wt-flag b { font: 600 15px var(--mono); text-align: right; }
+.wt-flag.on { color: var(--text); }
+.wt-flag.on i { background: #ff5fd2; box-shadow: 0 0 12px #ff5fd2; }
+.wt-foot { position: absolute; left: 52px; right: 52px; bottom: 12px; display: flex; justify-content: space-between;
+  font: 500 15px var(--mono); color: var(--faint); }
+.chip.live { color: var(--green); border-color: rgba(61, 255, 168, 0.35); display: flex; align-items: center; gap: 10px; }
+.chip.live i { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: blink 1.4s infinite; }

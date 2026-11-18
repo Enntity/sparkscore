@@ -163,8 +163,9 @@ def _text(value, nullable=True):
 def validate(body, config):
     """-> (state, questions, knowledge, knowledge_name, images). Mirrors TypeSafe's SystemOneRequest schema,
     plus SparkScore's optional `knowledge`: text the model reads before the state (a policy, a handbook), held
-    by the engine as a knowledge pack where it can; and d3-ultra's own `images`: base64 data URLs every
-    question reads (images.parse)."""
+    by the engine as a knowledge pack where it can; d3-ultra's own `images`: base64 data URLs every question
+    reads (images.parse); and `remember` (default true), false for images asked once (video frames), which
+    the engine then reads without keeping."""
     errors = []
 
     def error(loc, msg, kind, value):
@@ -188,6 +189,8 @@ def validate(body, config):
             images = imagelib.parse(body["images"])
         except ValueError as exc:
             error(["images"], str(exc), "image_error", None)
+    if "remember" in body and not isinstance(body["remember"], bool):
+        error(["remember"], "Input should be a valid boolean", "bool_type", body["remember"])
     knowledge, knowledge_name = body.get("knowledge"), body.get("knowledge_name")
     if knowledge is not None and (not isinstance(knowledge, str) or not knowledge.strip()):
         error(["knowledge"], "Input should be a nonempty string", "string_type", knowledge)
@@ -286,11 +289,11 @@ class Service:
         if not self.slots.acquire(blocking=False):
             raise RequestError(529, "every slot is busy; retry shortly", {"Retry-After": "1"})
         try:
-            return self._evaluate(state, questions, knowledge, images)
+            return self._evaluate(state, questions, knowledge, images, remember=body.get("remember", True))
         finally:
             self.slots.release()
 
-    def _evaluate(self, state, questions, knowledge=None, images=()):
+    def _evaluate(self, state, questions, knowledge=None, images=(), remember=True):
         cfg = self.config
         t0 = time.perf_counter()
         try:
@@ -324,7 +327,8 @@ class Service:
         def score(branches):
             ids, opts = [b.ids for b in branches], [b.option_ids for b in branches]
             if rendered.images:
-                rows, n = self.backend.score(rendered.prefix, ids, opts, images=rendered.images, report=report)
+                rows, n = self.backend.score(rendered.prefix, ids, opts, images=rendered.images, report=report,
+                                             remember=remember)
             elif rendered.pack:
                 rows, n = self.backend.score(rendered.prefix, ids, opts, pack=rendered.pack, report=report)
             else:

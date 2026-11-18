@@ -11,12 +11,13 @@ The image demos spread their scoring calls over this machine's loopback names
 from one of those names on this port, and nothing else, gets CORS. Proxied
 requests must name this server in Host (a page on another site rebound to
 127.0.0.1 is refused) and send JSON bodies. demo/out/ (recordings) is never
-served.
+served. Static files answer single byte ranges, so a video can seek.
 """
 
 import argparse
 import http.client
 import os
+import re
 import urllib.parse
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -27,6 +28,22 @@ PASS_HEADERS = ("content-type", "server-timing", "retry-after", "x-sparkscore-pa
 OUT = os.path.join(HERE, "out")
 # The names a page reaches this server by (vision.js's HOSTS); --host adds its own.
 LOOPBACK_NAMES = ("localhost", "s1.localhost", "s2.localhost", "127.0.0.1", "[::1]")
+
+
+class _Slice:
+    """`n` bytes of an open file, for copyfile."""
+
+    def __init__(self, f, n):
+        self.f, self.left = f, n
+
+    def read(self, size=-1):
+        size = self.left if size is None or size < 0 else min(size, self.left)
+        data = self.f.read(size)
+        self.left -= len(data)
+        return data
+
+    def close(self):
+        self.f.close()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -85,10 +102,6 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self._proxied():
             return self._proxy("GET")
-        # The translated path, so no spelling of the URL (%6Fut, ./out, x/../out) reaches the recordings.
-        local = os.path.realpath(self.translate_path(self.path))
-        if os.path.commonpath([local, OUT]) == OUT:
-            return self.send_error(404)
         return super().do_GET()
 
     def do_POST(self):
@@ -106,6 +119,39 @@ class Handler(SimpleHTTPRequestHandler):
             return self._proxy("DELETE")
         return self.send_error(404)
 
+    def send_head(self):
+        """Static files, with one byte range when asked (`Range: bytes=a-b`, `a-`, `-n`)."""
+        path = self.translate_path(self.path)
+        # The translated path, so no spelling of the URL (%6Fut, ./out, x/../out), GET or HEAD, reaches
+        # the recordings.
+        if os.path.commonpath([os.path.realpath(path), OUT]) == OUT:
+            self.send_error(404)
+            return None
+        spec = (self.headers.get("Range") or "").strip()
+        m = re.fullmatch(r"bytes=(\d*)-(\d*)", spec)
+        if not m or m.groups() == ("", "") or not os.path.isfile(path):
+            return super().send_head()
+        size = os.path.getsize(path)
+        first, last = m.groups()
+        if first:
+            start, end = int(first), min(int(last) if last else size - 1, size - 1)
+        else:
+            start, end = max(0, size - int(last)), size - 1
+        if start >= size or start > end:
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return None
+        f = open(path, "rb")
+        f.seek(start)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.end_headers()
+        return _Slice(f, end - start + 1)
+
     def do_OPTIONS(self):  # CORS preflight of the scoring call
         if not (self._host_ok() and self._cors_origin()):
             return self.send_error(404)
@@ -118,6 +164,7 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         if not self._proxied():
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Accept-Ranges", "bytes")
         elif origin := self._cors_origin():
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Expose-Headers", ", ".join(PASS_HEADERS[1:]))

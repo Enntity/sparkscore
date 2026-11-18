@@ -17,7 +17,11 @@
 # PORT (8015), BIND (127.0.0.1; 0.0.0.0 to serve your network), IMAGE (a
 # specific image), SPARKSCORE_API_KEY (bearer key), KNOWLEDGE_DIR (a folder of
 # *.md / *.txt documents, usable by name as knowledge_name, their packs built at
-# startup), PACKS (knowledge packs held, default 8; 0 turns them off).
+# startup), PACKS (knowledge packs held, default 8; 0 turns them off), STORE_GB
+# (device memory for the photo pack store, e.g. 20: every image pack is kept,
+# so a photo asked a new question skips its encoding), STORE_DIR and
+# STORE_DISK_GB (a directory on the NVMe and its budget, e.g. 300: packs past
+# STORE_GB go there and are read back ahead of their passes).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 if [[ -f .env ]]; then set -a; . ./.env; set +a; fi
@@ -52,6 +56,8 @@ serve() {
     -p "$BIND:$PORT:8015" -v "$model:/model:ro" \
     ${SPARKSCORE_API_KEY:+-e SPARKSCORE_API_KEY} ${PRECISION:+-e SPARKSCORE_PRECISION=$PRECISION} \
     ${PACKS:+-e SPARKSCORE_PACKS=$PACKS} ${KNOWLEDGE_DIR:+-v "$(cd "$KNOWLEDGE_DIR" && pwd):/knowledge:ro"} \
+    ${STORE_GB:+-e SPARKSCORE_STORE_GB=$STORE_GB} \
+    ${STORE_DIR:+-v "$(mkdir -p "$STORE_DIR" && cd "$STORE_DIR" && pwd):/store" -e SPARKSCORE_STORE_DISK_GB=${STORE_DISK_GB:-100}} \
     "$(image)" >/dev/null
   say "waiting for the model to load (about a minute)"
   for _ in $(seq 1 600); do

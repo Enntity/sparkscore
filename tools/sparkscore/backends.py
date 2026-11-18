@@ -256,16 +256,16 @@ class ScoreBackend:
             report["pack"] = response.get("pack", "built")
         return response
 
-    def score(self, prefix, branches, options, pack=None, report=None, images=None):
+    def score(self, prefix, branches, options, pack=None, report=None, images=None, remember=True):
         body = {"prefix": prefix, "branches": branches, "options": options}
         if self.attention:
             body["attention"] = self.attention
-        if images and self.image_packs:
+        if images and self.image_packs and remember:
             # The state block and its images as one image pack, the questions on it.
             response = self._post_pack(dict(body, prefix=[]), prefix, report if report is not None else {}, images)
         elif images:
-            # An Atlas without image packs: the images in the prefix, one call.
-            if report is not None:
+            # Not to keep (asked once), or an Atlas without image packs: the images in the prefix, one call.
+            if report is not None and remember:
                 report["pack"] = "off"
             response = self.http.post("/v1/score", dict(body, images=[image.wire() for image in images]))
         elif pack:

@@ -5,6 +5,7 @@
     python3 demo/record.py --montage
     python3 demo/record.py title:s5 packs title:packs --cut knowledge-packs   # the knowledge-pack feature video
     python3 demo/record.py --take firehose      # firehose.html played by a take (keys, as a presenter would)
+    python3 demo/record.py --take watch         # watch.html: the video dashboard through the film's scenes
 
 Needs demo/serve.py running (default http://127.0.0.1:8780) and Python
 Playwright. Frames come from a CDP screencast at high JPEG quality and are
@@ -30,13 +31,17 @@ ENCODE = ["-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-crf", "1
           "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-movflags", "+faststart"]
 
 
-async def capture(url, frames_dir, tail_ms=700, timeout_s=180, drive=None, ready="window.__ready === true"):
+async def capture(url, frames_dir, tail_ms=700, timeout_s=180, drive=None, ready="window.__ready === true", channel=None):
     """Screencast `url` from `ready` until the page says it is done (autoplay), or until `drive(page)`, a
-    take that presses the keys, returns."""
+    take that presses the keys, returns. `channel` "chrome" uses the installed Chrome (H.264 decoded by
+    the hardware, which a video page needs to keep its pace while recorded)."""
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(args=["--force-color-profile=srgb", "--disable-background-timer-throttling", "--disable-renderer-backgrounding"])
+        args = ["--force-color-profile=srgb", "--disable-background-timer-throttling", "--disable-renderer-backgrounding"]
+        if channel:
+            args.append("--window-size=1920,1080")  # Chrome's headless window, or it screencasts 1920x993
+        browser = await p.chromium.launch(channel=channel, args=args)
         page = await browser.new_page(viewport={"width": 1920, "height": 1080}, device_scale_factor=1)
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -202,15 +207,45 @@ async def firehose_take(page):
     await asyncio.sleep(4.0)
 
 
-TAKES = {"firehose": ("firehose.html", firehose_take, "typeof all !== 'undefined' && all.length > 0")}
+async def watch_take(page):
+    """The video dashboard: about 15 s of each of the film's six scenes (keys 1-6), with captions placed like
+    subtitles over the film so the dashboard stays clear."""
+    await page.add_script_tag(path=os.path.join(HERE, "take_overlay.js"))
+    await page.evaluate("document.querySelector('#ov .cap').style.bottom = '500px'")
+    cap = lambda kicker, text: page.evaluate(f"window.__ov.caption({json.dumps(kicker)}, {json.dumps(text)})")
+    fps = lambda: page.evaluate("document.getElementById('fps').textContent")
+    scenes = [
+        ("1", "Live", "Every frame the Spark can take is asked ten questions in one request"),
+        ("2", "Action", "Weapons, people, setting and tension, read from each frame"),
+        ("3", "Faces", "Emotion as a distribution, not a label: watch the river below"),
+        ("4", "Cuts", "Answers trail their frame by about half a second: the corner shows the frame answered"),
+        ("5", "Battle", "Fire, robots and fighting light up as they appear"),
+        ("6", "One DGX Spark", None),
+    ]
+    await asyncio.sleep(1.0)
+    for key, kicker, text in scenes:
+        await page.keyboard.press(key)
+        await asyncio.sleep(2.5)
+        await cap(kicker, text or f"{await fps()} frames a second, ten answers each, as the film plays. Nothing sped up")
+        await asyncio.sleep(13.0)
+    await page.evaluate("window.__ov.hide()")
+    await asyncio.sleep(1.0)
+
+
+# name -> (page, take, ready condition, browser channel)
+TAKES = {
+    "firehose": ("firehose.html", firehose_take, "typeof all !== 'undefined' && all.length > 0", None),
+    "watch": ("watch.html", watch_take, "document.getElementById('video').readyState >= 1", "chrome"),
+}
 
 
 def take(name, base):
-    page_path, drive, ready = TAKES[name]
+    page_path, drive, ready, channel = TAKES[name]
     warm(base)
     out_path = os.path.join(OUT, f"take-{name}.mp4")
     with tempfile.TemporaryDirectory(prefix="sparkscore-frames-") as tmp:
-        frames, _ = asyncio.run(capture(f"{base}/{page_path}", tmp, tail_ms=500, timeout_s=900, drive=drive, ready=ready))
+        frames, _ = asyncio.run(capture(f"{base}/{page_path}", tmp, tail_ms=500, timeout_s=900, drive=drive, ready=ready,
+                                        channel=channel))
         dur = encode(frames, tmp, out_path)
     print(f"{out_path}: {dur:.1f}s, {len(frames)} frames captured ({len(frames) / (frames[-1] - frames[0]):.1f}/s)")
 

@@ -74,6 +74,21 @@ class Proxy(unittest.TestCase):
         resp = self.request("POST", "/v1/systemone", {"Content-Type": "text/plain"}, b"{}")
         self.assertEqual(resp.status, 415)
 
+    def test_static_files_answer_byte_ranges(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("GET", "/vision.css", headers={"Range": "bytes=10-19"})
+        resp = conn.getresponse()
+        body = resp.read()
+        conn.close()
+        whole = (DEMO / "vision.css").read_bytes()
+        self.assertEqual(resp.status, 206)
+        self.assertEqual(body, whole[10:20])
+        self.assertEqual(resp.getheader("Content-Range"), f"bytes 10-19/{len(whole)}")
+        self.assertEqual(resp.getheader("Accept-Ranges"), "bytes")
+        # An open end, and a range past the end.
+        self.assertEqual(self.request("GET", "/vision.css", {"Range": f"bytes={len(whole) - 5}-"}).status, 206)
+        self.assertEqual(self.request("GET", "/vision.css", {"Range": f"bytes={len(whole) + 5}-"}).status, 416)
+
     def test_out_is_never_served(self):
         out = DEMO / "out"
         out.mkdir(exist_ok=True)
@@ -82,6 +97,7 @@ class Proxy(unittest.TestCase):
         self.addCleanup(probe.unlink)
         for path in ("/out/test-probe.txt", "/%6Fut/test-probe.txt", "/./out/test-probe.txt", "/photos/../out/test-probe.txt"):
             self.assertEqual(self.request("GET", path).status, 404, path)
+            self.assertEqual(self.request("HEAD", path).status, 404, path)
 
 
 if __name__ == "__main__":

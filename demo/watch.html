@@ -1,0 +1,292 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SparkScore · watching a film</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<link rel="stylesheet" href="vision.css">
+</head>
+<body>
+<!-- A film read live: every frame the page can get answered is asked ten questions in one request (emotion and
+     action as distributions, the setting, how many people, how tense, and five yes/no flags), and the dashboard
+     follows the film. Keys: Space play / pause, arrows seek 10 s, 1-6 jump to a scene, H hides the key line.
+     ?src= another video, ?inflight=N frames in flight (default 2). -->
+<div id="stage">
+  <div class="bg"><div class="grid"></div></div>
+  <header class="topbar">
+    <div class="brand"><span class="name">SparkScore</span><span class="sep"></span><span class="scene-title">Watching a film</span></div>
+    <div class="chips"><span class="chip live"><i></i><span id="fps">–</span> frames / s</span><span class="chip">10 questions a frame</span><span class="chip">d3-ultra · NVFP4</span><span class="chip">one DGX Spark</span></div>
+  </header>
+
+  <section class="wt-video panel">
+    <video id="video" muted playsinline preload="auto"></video>
+    <div class="wt-hud"><span class="wt-scan" id="scan"></span><span id="clock">0:00</span></div>
+    <div class="wt-answered"><img id="answered" alt=""><span id="answered-age">the frame answered</span></div>
+    <div class="wt-credit">Tears of Steel · © Blender Foundation · mango.blender.org · CC BY 3.0</div>
+    <div class="wt-progress"><div id="progress"></div></div>
+  </section>
+
+  <section class="wt-river panel">
+    <div class="wt-head"><span>Emotion over time</span><span class="wt-hint">the last 30 s of film</span></div>
+    <canvas id="river" width="1132" height="196"></canvas>
+  </section>
+
+  <section class="wt-moments panel">
+    <div class="wt-head"><span>Moments</span><span class="wt-hint">what changed, at film time</span></div>
+    <div id="moments"></div>
+  </section>
+
+  <section class="wt-card wt-emotion panel">
+    <div class="wt-head"><span>Emotion</span><span class="wt-top" id="emotion-top">–</span></div>
+    <div class="wt-bars" id="emotion"></div>
+  </section>
+
+  <section class="wt-card wt-action panel">
+    <div class="wt-head"><span>Action</span><span class="wt-top" id="action-top">–</span></div>
+    <div class="wt-bars" id="action"></div>
+  </section>
+
+  <section class="wt-card wt-scene panel">
+    <div class="wt-head"><span>Setting</span><span class="wt-hint">people in shot <b id="people">–</b></span></div>
+    <div class="wt-chips" id="setting"></div>
+  </section>
+
+  <section class="wt-card wt-signals panel">
+    <div class="wt-gauge"><canvas id="tension" width="210" height="122"></canvas><div class="wt-gauge-label"><b id="tension-word">–</b><span>tension</span></div></div>
+    <div class="wt-flags" id="flags"></div>
+  </section>
+
+  <footer class="wt-foot"><span id="keys">Space play / pause · ← → 10 s · 1–6 scenes · H hide this line</span><span id="latency"></span></footer>
+</div>
+<script src="vision.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const SRC = params.get("src") || "videos/tears_of_steel.mp4";
+const IN_FLIGHT = Number(params.get("inflight") || 2);
+const SCENES = [20, 92, 190, 300, 432, 520];   // s: bridge, ship, lab, faces, battle, ending
+
+const EMOTIONS = { joy: "#ffc23d", sadness: "#5aa2ff", anger: "#ff3d6e", fear: "#a77bff", surprise: "#3ee8ff",
+  disgust: "#3dffa8", calm: "#8d97bf", none: "#2b3354" };
+const EMOTION_LABEL = { none: "no face" };
+const ACTIONS = ["talking", "walking", "running", "fighting", "aiming", "operating", "embracing", "watching", "none"];
+const ACTION_LABEL = { aiming: "aiming a weapon", operating: "working a machine", none: "no one in shot" };
+const SETTINGS = ["street", "indoors", "lab", "battle", "waterside", "sky"];
+const TENSION = ["calm", "uneasy", "tense", "intense", "chaotic"];
+const FLAGS = { weapon: "Weapon", robot: "Robot / machine", closeup: "Close-up", fire: "Fire / smoke", dark: "Dark / night" };
+const choice = (instructions, keys) => ({ type: "choice", instructions, criteria: Object.fromEntries(keys.map(k => [k, null])) });
+const QUESTIONS = {
+  emotion: choice("What emotion does the most prominent person show?", Object.keys(EMOTIONS)),
+  action: choice("What are the people in this shot doing?", ACTIONS),
+  setting: choice("Where is this shot set?", SETTINGS),
+  tension: { type: "score", instructions: "How tense is this moment?", criteria: TENSION },
+  people: choice("How many people are visible?", ["0", "1", "2", "3+"]),
+  weapon: { type: "noul", instructions: "Is anyone holding a weapon?" },
+  robot: { type: "noul", instructions: "Is a robot or machine visible?" },
+  closeup: { type: "noul", instructions: "Is this a close-up of a face?" },
+  fire: { type: "noul", instructions: "Are there explosions, fire or smoke?" },
+  dark: { type: "noul", instructions: "Is the scene dark or at night?" },
+};
+
+const $ = id => document.getElementById(id);
+const video = $("video");
+const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+// ---------------------------------------------------------------- bars
+function bars(el, keys, colorOf, labelOf) {
+  el.innerHTML = keys.map(k => `<div class="wt-bar" data-k="${k}"><span class="l">${labelOf(k)}</span>` +
+    `<span class="t"><i style="background:${colorOf(k)}"></i></span><span class="v">–</span></div>`).join("");
+  return Object.fromEntries([...el.children].map(c => [c.dataset.k, c]));
+}
+const emotionBars = bars($("emotion"), Object.keys(EMOTIONS), k => EMOTIONS[k], k => EMOTION_LABEL[k] || k);
+const actionBars = bars($("action"), ACTIONS, () => "var(--cyan)", k => ACTION_LABEL[k] || k);
+$("setting").innerHTML = SETTINGS.map(k => `<span class="wt-chip" data-k="${k}">${k}<i></i></span>`).join("");
+$("flags").innerHTML = Object.entries(FLAGS).map(([k, l]) => `<div class="wt-flag" data-k="${k}"><i></i><span>${l}</span><b>–</b></div>`).join("");
+
+function setBars(map, probs, topEl, labelOf) {
+  let best = null;
+  for (const [k, row] of Object.entries(map)) {
+    const p = probs[k] ?? 0;
+    row.querySelector("i").style.width = `${p * 100}%`;
+    row.querySelector(".v").textContent = `${Math.round(p * 100)}%`;
+    if (!best || p > probs[best]) best = k;
+  }
+  for (const [k, row] of Object.entries(map)) row.classList.toggle("top", k === best);
+  topEl.textContent = `${labelOf(best)} ${Math.round(probs[best] * 100)}%`;
+  return best;
+}
+
+// ---------------------------------------------------------------- tension gauge
+function drawGauge(level) {
+  const c = $("tension"), g = c.getContext("2d"), cx = 105, cy = 112, r = 88;
+  g.clearRect(0, 0, c.width, c.height);
+  g.lineWidth = 16; g.lineCap = "round";
+  g.strokeStyle = "rgba(130,150,255,0.15)";
+  g.beginPath(); g.arc(cx, cy, r, Math.PI, 2 * Math.PI); g.stroke();
+  const f = level / (TENSION.length - 1);
+  const grad = g.createLinearGradient(cx - r, 0, cx + r, 0);
+  grad.addColorStop(0, "#3dffa8"); grad.addColorStop(0.5, "#ffc23d"); grad.addColorStop(1, "#ff3d6e");
+  g.strokeStyle = grad;
+  g.beginPath(); g.arc(cx, cy, r, Math.PI, Math.PI * (1 + f)); g.stroke();
+  const a = Math.PI * (1 + f);
+  g.fillStyle = "#fff";
+  g.beginPath(); g.arc(cx + r * Math.cos(a), cy + r * Math.sin(a), 9, 0, 2 * Math.PI); g.fill();
+}
+let gaugeShown = 0, gaugeTarget = 0;
+(function animateGauge() {
+  gaugeShown += (gaugeTarget - gaugeShown) * 0.12;
+  drawGauge(gaugeShown);
+  requestAnimationFrame(animateGauge);
+})();
+
+// ---------------------------------------------------------------- emotion river (film time on x)
+const history = [];   // {t, emotion: {key: p}}
+function drawRiver() {
+  const c = $("river"), g = c.getContext("2d"), W = c.width, H = c.height, span = 30;
+  g.clearRect(0, 0, W, H);
+  const now = video.currentTime, t0 = now - span;
+  const pts = history.filter(h => h.t >= t0 - 2 && h.t <= now + 1);
+  g.strokeStyle = "rgba(130,150,255,0.10)"; g.lineWidth = 1;
+  for (let s = Math.max(0, Math.ceil(t0 / 5) * 5); s <= now; s += 5) {
+    const x = (s - t0) / span * W;
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke();
+    g.fillStyle = "rgba(141,151,191,0.6)"; g.font = "13px JetBrains Mono"; g.fillText(fmt(s), x + 4, H - 6);
+  }
+  if (pts.length >= 2) {
+    const keys = Object.keys(EMOTIONS).filter(k => k !== "none");
+    let base = pts.map(() => 0);
+    for (const k of keys) {
+      const top = pts.map((p, i) => base[i] + (p.emotion[k] ?? 0));
+      g.beginPath();
+      pts.forEach((p, i) => { const x = (p.t - t0) / span * W, y = H - 22 - top[i] * (H - 30); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+      for (let i = pts.length - 1; i >= 0; i--) g.lineTo((pts[i].t - t0) / span * W, H - 22 - base[i] * (H - 30));
+      g.closePath();
+      g.fillStyle = EMOTIONS[k] + "cc";
+      g.fill();
+      base = top;
+    }
+  }
+  g.strokeStyle = "rgba(255,255,255,0.7)"; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(W - 1, 0); g.lineTo(W - 1, H); g.stroke();
+  $("clock").textContent = `${fmt(now)} / ${fmt(video.duration || 0)}`;
+  $("progress").style.width = `${(now / (video.duration || 1)) * 100}%`;
+  requestAnimationFrame(drawRiver);
+}
+requestAnimationFrame(drawRiver);
+
+// ---------------------------------------------------------------- moments: what changed, kept when it holds for two frames
+const moments = [];
+let lastEmotion = null, lastAction = null, pending = {}, flagOn = {};
+function moment(t, text, color) {
+  moments.unshift({ t, text, color });
+  moments.length = Math.min(moments.length, 7);
+  $("moments").innerHTML = moments.map((m, i) => `<div class="wt-moment${i ? "" : " new"}" style="--c:${m.color}">` +
+    `<b>${fmt(m.t)}</b><span>${Vision.escape(m.text)}</span></div>`).join("");
+}
+function held(kind, value) {
+  if (pending[kind] === value) return true;
+  pending[kind] = value;
+  return false;
+}
+function watchChanges(t, a) {
+  const e = a.emotion.choice, ep = a.emotion.probabilities[e];
+  if (e !== "none" && ep >= 0.45 && e !== lastEmotion && held("emotion", e)) {
+    lastEmotion = e;
+    moment(t, `${e[0].toUpperCase() + e.slice(1)} ${Math.round(ep * 100)}%`, EMOTIONS[e]);
+  }
+  const ac = a.action.choice, ap = a.action.probabilities[ac];
+  if (ac !== "none" && ap >= 0.5 && ac !== lastAction && held("action", ac)) {
+    lastAction = ac;
+    moment(t, `Now ${ACTION_LABEL[ac] || ac}`, "var(--cyan)");
+  }
+  for (const k of Object.keys(FLAGS)) {
+    const p = a[k].noul;
+    if (!flagOn[k] && p > 0.65) { flagOn[k] = true; moment(t, `${FLAGS[k]} ${Math.round(p * 100)}%`, "#ff5fd2"); }
+    else if (flagOn[k] && p < 0.35) flagOn[k] = false;
+  }
+}
+
+// ---------------------------------------------------------------- applying an answer
+let shownAt = -1;
+// The dashboard describes `frame` (taken at film time t): shown in the corner, since answers trail their frame.
+function apply(t, a, frame) {
+  if (t < shownAt) return;      // an older frame answered late: the dashboard only moves forward
+  shownAt = t;
+  $("answered").src = frame;
+  history.push({ t, emotion: a.emotion.probabilities });
+  while (history.length && history[0].t < t - 90) history.shift();
+  setBars(emotionBars, a.emotion.probabilities, $("emotion-top"), k => EMOTION_LABEL[k] || k);
+  setBars(actionBars, a.action.probabilities, $("action-top"), k => ACTION_LABEL[k] || k);
+  for (const chip of $("setting").children) {
+    const p = a.setting.probabilities[chip.dataset.k] ?? 0;
+    chip.style.setProperty("--p", p);
+    chip.classList.toggle("on", chip.dataset.k === a.setting.choice);
+  }
+  $("people").textContent = a.people.choice;
+  gaugeTarget = a.tension.score;
+  $("tension-word").textContent = TENSION[Math.round(a.tension.score)];
+  for (const row of $("flags").children) {
+    const p = a[row.dataset.k].noul;
+    row.classList.toggle("on", p > 0.5);
+    row.querySelector("b").textContent = `${Math.round(p * 100)}%`;
+  }
+  watchChanges(t, a);
+}
+
+// ---------------------------------------------------------------- the frame loop: IN_FLIGHT frames asked at a time
+const shot = document.createElement("canvas");
+shot.width = 640; shot.height = 267;
+const done = [];
+async function loop() {
+  for (;;) {
+    if (video.paused || video.ended || video.readyState < 2) { await Vision.sleep(80); continue; }
+    const t = video.currentTime;
+    shot.getContext("2d").drawImage(video, 0, 0, shot.width, shot.height);
+    const frame = shot.toDataURL("image/jpeg", 0.85);
+    $("scan").classList.remove("on"); void $("scan").offsetWidth; $("scan").classList.add("on");
+    try {
+      // A frame is asked once: read, not kept (remember: false).
+      const { answers, totalMs } = await Vision.ask({ state: "", images: [frame], questions: QUESTIONS, remember: false });
+      done.push(performance.now());
+      apply(t, answers, frame);
+      $("latency").textContent = `answer ${Math.round(totalMs)} ms after its frame`;
+      $("answered-age").textContent = `answered frame · ${(totalMs / 1000).toFixed(1)} s ago`;
+    } catch (e) {
+      console.warn(e);
+      await Vision.sleep(500);
+    }
+  }
+}
+setInterval(() => {
+  const now = performance.now();
+  while (done.length && done[0] < now - 3000) done.shift();
+  $("fps").textContent = video.paused ? "–" : (done.length / 3).toFixed(1);
+}, 250);
+
+// ---------------------------------------------------------------- keys
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === " ") video.paused ? video.play() : video.pause();
+  else if (k === "arrowright") video.currentTime = Math.min(video.duration, video.currentTime + 10);
+  else if (k === "arrowleft") video.currentTime = Math.max(0, video.currentTime - 10);
+  else if (k >= "1" && k <= String(SCENES.length)) { video.currentTime = SCENES[+k - 1]; video.play(); }
+  else if (k === "h") $("keys").classList.toggle("hidden");
+  else return;
+  // A jump starts the river and the change detection afresh (no line across the gap).
+  if (k.startsWith("arrow") || (k >= "1" && k <= "9")) {
+    shownAt = -1; lastEmotion = lastAction = null; pending = {}; history.length = 0;
+  }
+  e.preventDefault();
+});
+
+Vision.fitStage();
+video.src = SRC;
+video.addEventListener("error", () => { $("latency").textContent = `no video at ${SRC}: run python3 demo/videos/fetch.py`; });
+drawGauge(0);
+for (let k = 0; k < IN_FLIGHT; k++) loop();
+</script>
+</body>
+</html>

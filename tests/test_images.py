@@ -96,10 +96,11 @@ class ImageBackend:
     name, images = "fake-images", True
 
     def __init__(self):
-        self.calls = []
+        self.calls, self.remember = [], []
 
-    def score(self, prefix, branches, options, images=None, **_):
+    def score(self, prefix, branches, options, images=None, remember=True, **_):
         self.calls.append((prefix, images))
+        self.remember.append(remember)
         return [[0.75, 0.25] for _ in options], 1
 
 
@@ -135,6 +136,17 @@ class Server(unittest.TestCase):
         prefix, sent = backend.calls[0]
         self.assertEqual(len(prefix), 192 + 1)
         self.assertEqual([(i.width, i.height) for i in sent], [(512, 384)])
+
+    def test_remember_false_reaches_the_backend(self):
+        backend = ImageBackend()
+        port = self.serve(ImageRenderer(), backend)
+        image = [url("png", png(64, 64))]
+        self.assertEqual(self.post(port, {**self.BODY, "images": image})[0], 200)
+        self.assertEqual(self.post(port, {**self.BODY, "images": image, "remember": False})[0], 200)
+        self.assertEqual(backend.remember, [True, False])
+        status, body = self.post(port, {**self.BODY, "images": image, "remember": "no"})
+        self.assertEqual(status, 422, body)
+        self.assertEqual(body["detail"][0]["loc"], ["body", "remember"])
 
     def test_bad_images_are_422(self):
         port = self.serve(ImageRenderer(), ImageBackend())
@@ -204,6 +216,20 @@ class Server(unittest.TestCase):
         self.assertEqual(len(sent), before + 1)
         self.assertEqual((sent[-1][1]["prefix"], sent[-1][1]["images"][0]["format"]), ([1, 2], "png"))
         self.assertEqual(report["pack"], "off")
+
+    def test_an_image_not_to_remember_goes_inline(self):
+        from tools.sparkscore.backends import ScoreBackend
+
+        backend = ScoreBackend("http://127.0.0.1:1")
+        sent = []
+        backend.http.post = lambda path, body: sent.append(body) or {"probs": [[1.0, 1.0]]}
+        (img,) = images.parse([url("png", png(64, 64))])
+        report = {}
+        backend.score([1, 2], [[3]], [[100, 101]], images=[img], remember=False, report=report)
+        self.assertEqual((sent[0]["prefix"], sent[0]["images"][0]["format"]), ([1, 2], "png"))
+        self.assertNotIn("pack", sent[0])
+        self.assertEqual(backend.pack_ids, {})
+        self.assertNotIn("pack", report)
 
     def test_pack_ids_are_kept_under_fixed_size_keys(self):
         from tools.sparkscore.backends import ScoreBackend

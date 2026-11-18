@@ -1,11 +1,11 @@
 {
   "schema": "sparkscore.atlas-engine-source/v1",
-  "note": "The score path and dense 27B prefill kernels (on Atlas-Inf main 999bfc48d, proposed upstream as Atlas-Inf/atlas#331), plus knowledge packs and their long-key attention kernel (b594151da..2d26979c0, Enntity/atlas only for now). Once #331 merges and the packs land upstream: install/repin.sh <merge commit>.",
+  "note": "The score path and dense 27B prefill kernels (merged upstream as Atlas-Inf/atlas#331), knowledge packs (proposed upstream as Atlas-Inf/atlas#332), and on top of them image packs, the FP8 pack store with its NVMe tier and read-ahead, and the image prefill fusions (Enntity/atlas sparkscore/score-images only for now). Once these land upstream: install/repin.sh <merge commit>.",
   "repository": "https://github.com/Enntity/atlas.git",
-  "branch": "sparkscore/score-packs-20261108",
-  "commit": "2d26979c0d4f6ee0175ad5be85293e1d6b8ba1d1",
-  "tree": "cc6d6860b62a3e92d2054d5a066b44cae7e5c692",
-  "upstream_pr": "https://github.com/Atlas-Inf/atlas/pull/331",
+  "branch": "sparkscore/score-images",
+  "commit": "68baafe3c86e22602b600b88f069d32a671f3804",
+  "tree": "df0808efdd319fcc7d571bc8d60a7616d9326fa9",
+  "upstream_pr": "https://github.com/Atlas-Inf/atlas/pull/332",
   "target": {
     "hw": "gb10",
     "model": "qwen3.8-27b",
