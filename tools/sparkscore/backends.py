@@ -198,6 +198,7 @@ class ScoreBackend:
 
     name = "score"
     packs = True
+    images = True
 
     def __init__(self, base_url, timeout=600.0, attention=None):
         self.http = _Http(base_url, timeout)
@@ -235,11 +236,14 @@ class ScoreBackend:
             report["pack"] = response.get("pack", "built")
         return response
 
-    def score(self, prefix, branches, options, pack=None, report=None):
+    def score(self, prefix, branches, options, pack=None, report=None, images=None):
         body = {"prefix": prefix, "branches": branches, "options": options}
         if self.attention:
             body["attention"] = self.attention
-        if pack:
+        if images:
+            body["images"] = [image.wire() for image in images]
+            response = self.http.post("/v1/score", body)
+        elif pack:
             response = self._post_pack(body, pack, report if report is not None else {})
         else:
             response = self.http.post("/v1/score", body)

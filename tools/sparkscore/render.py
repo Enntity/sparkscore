@@ -58,6 +58,9 @@ class Rendered:
     # A knowledge pack (templates.d3_ultra): tokens before the prefix that the
     # engine holds, so the prefix continues them. Empty: none.
     pack: list = field(default_factory=list)
+    # Images (tools.sparkscore.images.Image) whose pads the prefix holds, in
+    # order; the engine encodes them (templates.d3_ultra). Empty: none.
+    images: list = field(default_factory=list)
 
     @property
     def input_tokens(self):

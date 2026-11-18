@@ -37,6 +37,7 @@ import zlib
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from tools.sparkscore import images as imagelib
 from tools.sparkscore import answers, knowledge as kb, render
 from tools.sparkscore.backends import BackendError, EchoBackend, ScoreBackend, VllmBackend
 
@@ -160,9 +161,10 @@ def _text(value, nullable=True):
 
 
 def validate(body, config):
-    """-> (state, questions, knowledge). Mirrors TypeSafe's SystemOneRequest schema, plus SparkScore's
-    optional `knowledge`: text the model reads before the state (a policy, a handbook), held by the engine
-    as a knowledge pack where it can."""
+    """-> (state, questions, knowledge, knowledge_name, images). Mirrors TypeSafe's SystemOneRequest schema,
+    plus SparkScore's optional `knowledge`: text the model reads before the state (a policy, a handbook), held
+    by the engine as a knowledge pack where it can; and d3-ultra's own `images`: base64 data URLs every
+    question reads (images.parse)."""
     errors = []
 
     def error(loc, msg, kind, value):
@@ -179,7 +181,13 @@ def validate(body, config):
     if "state" in body and not _text(state, nullable=False):
         error(["state"], "Input should be a string, an object or an array", "state_type", state)
     if body.get("assets") is not None:
-        error(["assets"], "assets (images) are not supported by this model", "unsupported", None)
+        error(["assets"], "assets are not supported; send images as a list of base64 data URLs", "unsupported", None)
+    images = []
+    if body.get("images") is not None:
+        try:
+            images = imagelib.parse(body["images"])
+        except ValueError as exc:
+            error(["images"], str(exc), "image_error", None)
     knowledge, knowledge_name = body.get("knowledge"), body.get("knowledge_name")
     if knowledge is not None and (not isinstance(knowledge, str) or not knowledge.strip()):
         error(["knowledge"], "Input should be a nonempty string", "string_type", knowledge)
@@ -206,7 +214,7 @@ def validate(body, config):
     ]:
         if nesting(value) > MAX_NESTING:
             raise RequestError(400, f"{'.'.join(map(str, loc))} is nested deeper than {MAX_NESTING} levels")
-    return state, questions, knowledge, knowledge_name
+    return state, questions, knowledge, knowledge_name, images
 
 
 def _validate_question(name, q, error):
@@ -268,7 +276,7 @@ class Service:
 
     def systemone(self, body):
         """-> (response, timings in ms, prompts the engine ran, prefix tokens, pack status or None)."""
-        state, questions, knowledge, knowledge_name = validate(body, self.config)
+        state, questions, knowledge, knowledge_name, images = validate(body, self.config)
         if knowledge_name is not None:
             try:
                 knowledge = self.library.text(knowledge_name)
@@ -278,15 +286,19 @@ class Service:
         if not self.slots.acquire(blocking=False):
             raise RequestError(529, "every slot is busy; retry shortly", {"Retry-After": "1"})
         try:
-            return self._evaluate(state, questions, knowledge)
+            return self._evaluate(state, questions, knowledge, images)
         finally:
             self.slots.release()
 
-    def _evaluate(self, state, questions, knowledge=None):
+    def _evaluate(self, state, questions, knowledge=None, images=()):
         cfg = self.config
         t0 = time.perf_counter()
         try:
-            if knowledge is None:
+            if images:
+                if not getattr(self.backend, "images", False) or not hasattr(self.renderer, "knowledge_head"):
+                    raise render.Unsupported("images need the d3-ultra template on the score backend")
+                rendered = self.renderer.render(state, questions, knowledge, images=images)
+            elif knowledge is None:
                 rendered = self.renderer.render(state, questions)
             elif not hasattr(self.renderer, "knowledge_head"):
                 raise render.Unsupported("knowledge is supported by the d3-ultra template only")
@@ -311,7 +323,9 @@ class Service:
 
         def score(branches):
             ids, opts = [b.ids for b in branches], [b.option_ids for b in branches]
-            if rendered.pack:
+            if rendered.images:
+                rows, n = self.backend.score(rendered.prefix, ids, opts, images=rendered.images)
+            elif rendered.pack:
                 rows, n = self.backend.score(rendered.prefix, ids, opts, pack=rendered.pack, report=report)
             else:
                 rows, n = self.backend.score(rendered.prefix, ids, opts)
@@ -360,6 +374,8 @@ class Service:
             "per_question_context": cfg.per_question_context,
             "per_request_context": cfg.per_request_context,
             "max_concurrent_requests": cfg.max_concurrent,
+            "max_images": imagelib.MAX_IMAGES,
+            "max_image_bytes": imagelib.MAX_IMAGE_BYTES,
         }
 
 

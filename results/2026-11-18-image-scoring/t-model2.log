@@ -1,0 +1,35 @@
+warning: atlas-kernels@1.0.0-beta-preview: atlas-kernels: compiled 213 kernels for target 0 (gb10, qwen3.8-27b, nvfp4) (18 model-specific overrides)
+warning: atlas-kernels@1.0.0-beta-preview: atlas-kernels: dedup+parallel: 213/213 unique nvcc invocations (0 cache hits, 1.0× dedup), 20 parallel workers
+warning: atlas-kernels@1.0.0-beta-preview: closure: unresolved include (kernels/gb10/qwen3.6-27b/nvfp4/q4k_vendor/common.cuh -> vendors/hip.h)
+warning: atlas-kernels@1.0.0-beta-preview: closure: unresolved include (kernels/gb10/qwen3.6-27b/nvfp4/q4k_vendor/common.cuh -> vendors/musa.h)
+   Compiling spark-model v1.0.0-beta-preview (/build/crates/spark-model)
+    Finished `release` profile [optimized] target(s) in 41.76s
+     Running unittests src/lib.rs (target/release/deps/spark_model-8a94bb41185fe3dc)
+
+running 23 tests
+test model::trait_impl::prefill_b::embed_chunk::tests::a_cached_head_of_a_straddling_item_needs_no_rows ... ok
+test model::trait_impl::prefill_b::embed_chunk::tests::a_per_chunk_window_covers_exactly_its_own_splice_range ... ok
+test model::trait_impl::prefill_b::embed_chunk::tests::a_placeholder_past_the_encoded_rows_fails_only_its_request ... ok
+test model::trait_impl::prefill_b::embed_chunk::sim_tests::the_issue_180_warm_sequences ... ok
+test model::trait_impl::prefill_b::embed_chunk::tests::branch_replayed_tail_image_pads_keep_their_encoder_rows ... ok
+test model::trait_impl::prefill_b::embed_chunk::tests::vision_rows_fail_closed_when_the_packed_slice_is_short ... ok
+test model::trait_impl::prefill_b::embed_chunk::tests::cached_items_shift_rows_down_by_the_skipped_rows ... ok
+test model::trait_impl::prefill_b::embed_chunk::tests::vision_rows_follow_the_full_prompt_across_chunks ... ok
+test model::trait_impl::prefill_b::score_plan::tests::a_block_aligned_pack_needs_no_tail_copy ... ok
+test model::trait_impl::prefill_b::score_plan::tests::a_pack_build_is_one_whole_stream ... ok
+test model::trait_impl::prefill_b::score_plan::tests::a_pack_shifts_every_position_and_its_streams_share_its_blocks ... ok
+test model::trait_impl::prefill_b::score_plan::tests::a_short_state_on_a_pack_has_no_head_and_its_branches_read_the_pack ... ok
+test model::trait_impl::prefill_b::score_plan::tests::heads_come_first_and_branches_keep_request_order ... ok
+test model::trait_impl::prefill_b::score_plan::tests::bidir_head_reads_its_first_branch_tail ... ok
+test model::trait_impl::prefill_b::score_plan::tests::one_request_shares_whole_blocks_and_replays_the_tail ... ok
+test model::trait_impl::prefill_b::score_plan::tests::readouts_map_back_from_each_branch_end_into_processed_rows ... ok
+test model::trait_impl::prefill_b::score_vision::tests::streams_map_to_their_requests ... ok
+test vision_preprocess::score_image::tests::decoded_image_byte_limit_is_enforced ... ok
+test vision_preprocess::score_image::tests::source_pixel_limit_is_checked_before_decode ... ok
+test vision_preprocess::score_image::tests::decode_rejects_format_mismatch_and_corrupt_bytes ... ok
+test vision_preprocess::score_image::tests::sixteen_bit_pngs_decode_like_pil ... ok
+test vision_preprocess::score_image::tests::rgb_decode_matches_pil_convert_without_exif_transpose ... ok
+test model::trait_impl::prefill_b::embed_chunk::sim_tests::random_prompts_caches_and_chunkings ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 2541 filtered out; finished in 0.03s
+

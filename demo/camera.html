@@ -1,0 +1,170 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SparkScore · a camera programmed by a sentence</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<link rel="stylesheet" href="vision.css">
+</head>
+<body>
+<div id="stage">
+  <div class="bg"><div class="grid"></div></div>
+  <header class="topbar">
+    <div class="brand"><span class="name">SparkScore</span><span class="sep"></span><span class="scene-title">A camera programmed by a sentence</span></div>
+    <div class="chips"><span class="chip">d3-ultra · NVFP4</span><span class="chip">one DGX Spark</span></div>
+  </header>
+
+  <section class="feed panel">
+    <video id="video" playsinline muted></video>
+    <canvas id="view" width="1280" height="720"></canvas>
+    <div id="alerts"></div>
+    <div class="feed-bar">
+      <div class="sources">
+        <button data-source="camera" class="on">Camera</button>
+        <button data-source="photos">Sample photos</button>
+        <label class="file">Video file<input id="file" type="file" accept="video/*"></label>
+      </div>
+      <div class="live"><span class="dot"></span><span id="status">starting…</span></div>
+    </div>
+  </section>
+
+  <section class="watchers">
+    <div class="watch-head">
+      <div class="label">Watching for</div>
+      <div class="hint">type a yes / no question · Enter to watch</div>
+    </div>
+    <div id="cards"></div>
+  </section>
+
+  <footer class="stats panel">
+    <div class="stat"><div class="v" id="fps">–</div><div class="k">frames scored / s</div></div>
+    <div class="stat"><div class="v" id="ms">–</div><div class="k">ms per answer</div></div>
+    <div class="stat"><div class="v" id="qs">–</div><div class="k">questions / s</div></div>
+    <div class="note">Every frame is one request: all questions read the same image, encoded once.<br>No training, no labels: the questions are the program.</div>
+  </footer>
+</div>
+<script src="vision.js"></script>
+<script>
+const COLORS = ["#3ee8ff", "#a77bff", "#3dffa8", "#ffc23d", "#ff5fd2", "#ff7a3d"];
+const DEFAULTS = ["Is someone holding a phone?", "Is a person smiling?", "Is there a cup or mug in view?", "Is someone giving a thumbs up?"];
+const HISTORY = 90;
+const watchers = [];
+const cards = document.getElementById("cards");
+const view = document.getElementById("view"), ctx = view.getContext("2d");
+const video = document.getElementById("video");
+let source = "camera", photos = [], photoIndex = 0, photoImage = null, photoSince = 0;
+
+function addWatcher(text, slot = watchers.length) {
+  const color = COLORS[slot % COLORS.length];
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.setProperty("--c", color);
+  card.innerHTML = `<input value="" spellcheck="false"><div class="row"><canvas width="380" height="84"></canvas><div class="pct">–</div></div>`;
+  const input = card.querySelector("input");
+  input.value = text;
+  const w = { text, color, hist: [], card, spark: card.querySelector("canvas"), pct: card.querySelector(".pct") };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") { w.text = input.value.trim(); w.hist = []; input.blur(); } });
+  watchers[slot] = w;
+  cards.appendChild(card);
+}
+DEFAULTS.forEach(t => addWatcher(t));
+
+function drawSpark(w) {
+  const c = w.spark, g = c.getContext("2d"), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  g.strokeStyle = "rgba(141,151,191,0.18)"; g.setLineDash([4, 6]); g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke(); g.setLineDash([]);
+  if (w.hist.length < 2) return;
+  const x = i => W - (w.hist.length - 1 - i) * (W / (HISTORY - 1)), y = p => H - 4 - p * (H - 8);
+  const grad = g.createLinearGradient(0, 0, 0, H); grad.addColorStop(0, w.color + "66"); grad.addColorStop(1, w.color + "00");
+  g.beginPath(); g.moveTo(x(0), H); w.hist.forEach((p, i) => g.lineTo(x(i), y(p))); g.lineTo(x(w.hist.length - 1), H); g.fillStyle = grad; g.fill();
+  g.beginPath(); w.hist.forEach((p, i) => (i ? g.lineTo : g.moveTo).call(g, x(i), y(p))); g.strokeStyle = w.color; g.lineWidth = 3; g.stroke();
+}
+
+function paintFrame() {
+  // Cover-fit the current source into the 16:9 view.
+  let src = null, sw = 0, sh = 0;
+  if (source === "photos") {
+    if (photos.length && (!photoImage || performance.now() - photoSince > 1600)) {
+      photoImage = photos[photoIndex++ % photos.length]; photoSince = performance.now();
+    }
+    if (photoImage && photoImage.complete) { src = photoImage; sw = src.naturalWidth; sh = src.naturalHeight; }
+  } else if (video.readyState >= 2) { src = video; sw = video.videoWidth; sh = video.videoHeight; }
+  if (!src) return false;
+  const s = Math.max(view.width / sw, view.height / sh), dw = sw * s, dh = sh * s;
+  ctx.drawImage(src, (view.width - dw) / 2, (view.height - dh) / 2, dw, dh);
+  return true;
+}
+
+// The frame sent for scoring: the view at 640x360 (d3's processor would resize the 1280x720 view anyway).
+const shot = document.createElement("canvas"); shot.width = 640; shot.height = 360;
+function frameURL() { shot.getContext("2d").drawImage(view, 0, 0, 640, 360); return shot.toDataURL("image/jpeg", 0.88); }
+
+const rate = new Vision.Rate();
+async function scoreLoop() {
+  for (;;) {
+    if (!paintFrame()) { await Vision.sleep(100); continue; }
+    const live = watchers.filter(w => w.text);
+    const questions = Object.fromEntries(live.map((w, i) => [`w${i}`, { type: "noul", instructions: w.text }]));
+    try {
+      const { answers, backendMs } = await Vision.ask({ state: "", images: [frameURL()], questions });
+      live.forEach((w, i) => { w.hist.push(answers[`w${i}`].noul); if (w.hist.length > HISTORY) w.hist.shift(); });
+      rate.tick(backendMs);
+      document.getElementById("status").textContent = "live";
+    } catch (e) {
+      document.getElementById("status").textContent = String(e.message || e);
+      await Vision.sleep(1000);
+    }
+  }
+}
+
+function render() {
+  paintFrame();
+  const alerts = [];
+  for (const w of watchers) {
+    drawSpark(w);
+    const p = w.hist.length ? w.hist[w.hist.length - 1] : null;
+    w.pct.textContent = p == null ? "–" : `${Math.round(p * 100)}%`;
+    w.card.classList.toggle("hot", p != null && p > 0.5);
+    if (p != null && p > 0.5) alerts.push(`<div class="alert" style="--c:${w.color}">${Vision.escape(w.text.replace(/\?$/, ""))}</div>`);
+  }
+  document.getElementById("alerts").innerHTML = alerts.join("");
+  document.getElementById("fps").textContent = rate.perSecond() ? rate.perSecond().toFixed(1) : "–";
+  document.getElementById("ms").textContent = rate.ms() ? Math.round(rate.ms()) : "–";
+  document.getElementById("qs").textContent = rate.perSecond() ? Math.round(rate.perSecond() * watchers.filter(w => w.text).length) : "–";
+  requestAnimationFrame(render);
+}
+
+async function useCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
+    video.srcObject = stream; await video.play(); return true;
+  } catch (e) { return false; }
+}
+async function setSource(name) {
+  source = name;
+  document.querySelectorAll(".sources button").forEach(b => b.classList.toggle("on", b.dataset.source === name));
+  if (name === "photos" && !photos.length) photos = (await Vision.library()).map(p => Object.assign(new Image(), { src: p.url }));
+  if (name === "camera" && !(await useCamera())) { document.getElementById("status").textContent = "no camera: showing sample photos"; return setSource("photos"); }
+}
+document.querySelectorAll(".sources button").forEach(b => b.addEventListener("click", () => setSource(b.dataset.source)));
+document.getElementById("file").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  video.src = URL.createObjectURL(f); video.loop = true; video.play(); source = "video";
+  document.querySelectorAll(".sources button").forEach(b => b.classList.remove("on"));
+});
+
+Vision.fitStage();
+// Two frames in flight: while one is scored the next is already queued, and the engine can merge them.
+const IN_FLIGHT = Number(new URLSearchParams(location.search).get("inflight") || 2);
+setSource(new URLSearchParams(location.search).get("source") || "camera").then(() => {
+  for (let i = 0; i < IN_FLIGHT; i++) setTimeout(scoreLoop, i * 120);
+  requestAnimationFrame(render);
+});
+</script>
+</body>
+</html>

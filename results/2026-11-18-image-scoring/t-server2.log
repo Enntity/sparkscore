@@ -1,0 +1,51 @@
+warning: atlas-kernels@1.0.0-beta-preview: atlas-kernels: compiled 213 kernels for target 0 (gb10, qwen3.8-27b, nvfp4) (18 model-specific overrides)
+warning: atlas-kernels@1.0.0-beta-preview: atlas-kernels: dedup+parallel: 213/213 unique nvcc invocations (0 cache hits, 1.0× dedup), 20 parallel workers
+warning: atlas-kernels@1.0.0-beta-preview: closure: unresolved include (kernels/gb10/qwen3.6-27b/nvfp4/q4k_vendor/common.cuh -> vendors/hip.h)
+warning: atlas-kernels@1.0.0-beta-preview: closure: unresolved include (kernels/gb10/qwen3.6-27b/nvfp4/q4k_vendor/common.cuh -> vendors/musa.h)
+   Compiling spark-model v1.0.0-beta-preview (/build/crates/spark-model)
+   Compiling spark-server v1.0.0-beta-preview (/build/crates/spark-server)
+    Finished `release` profile [optimized] target(s) in 1m 03s
+     Running unittests src/main.rs (target/release/deps/spark-e984d0a4e1dfa803)
+
+running 38 tests
+test api::score::score_images::tests::images_with_packs_are_refused ... ok
+test api::score::score_images::tests::pad_count_refusal_names_both_counts ... ok
+test api::score::score_images::tests::image_runs_must_be_well_formed_and_match_image_count ... ok
+test api::score::score_images::tests::video_pads_are_refused_in_image_requests ... ok
+test api::score::score_images::tests::image_pads_in_branches_are_refused ... ok
+test api::completions_logprobs::tests::echo_null_first_then_prompt_scores ... ok
+test api::score::tests::readouts_require_one_to_four_in_branch_offsets_per_branch ... ok
+test api::score::tests::per_branch_options_must_match_branches ... ok
+test api::score::tests::shared_options_expand_per_branch ... ok
+test api::score::tests::response_keeps_legacy_flat_shape_and_nests_requested_readouts ... ok
+test api::score::tests::attention_mode_is_validated ... ok
+test api::score::tests::rejects_empty_and_out_of_vocab ... ok
+test api::score::tests::a_pack_is_tokens_or_an_id_never_both ... ok
+test scheduler::score::tests::an_unknown_pack_error_is_its_own_kind ... ok
+test scheduler::score::tests::a_tick_takes_one_pass_and_leaves_the_rest_queued ... ok
+test scheduler::score::tests::check_fits_needs_each_branch_to_fit_a_pass_alone ... ok
+test scheduler::mtp_step::one_forward::tests::logprob_tests::unscored_logprob_admission_keeps_dflash_requests_on_single_sequence_path ... ok
+test scheduler::spec_step::admission::tests::unscored_logprob_admission_declines_ngram_and_self_spec ... ok
+test scheduler::score::tests::admit_refuses_a_full_backlog_and_drops_abandoned_jobs ... ok
+test scheduler::score::tests::oversized_jobs_split_into_passes_that_fit ... ok
+test scheduler::score::tests::image_jobs_are_taken_in_passes_of_their_own ... ok
+test scheduler::score::tests::cost_bounds_rows_and_streams ... ok
+test tool_parser::tail::tests::group_c::fuzzy_repair_mcp_double_underscore_added ... ok
+test scheduler::score::tests::image_jobs_share_passes_up_to_the_vision_row_budget ... ok
+test scheduler::verify_pipeline_helper::scored::tests::unrequested_scoring_performs_no_model_read_or_pick ... ok
+test tool_parser::tail::tests::group_c::fuzzy_repair_dash_vs_underscore ... ok
+test scheduler::mtp_step::one_forward::tests::bootstrap_score_tests::bootstrap_score_unscored_fast_path_does_not_copy ... ok
+test tool_parser::tail::tests::group_c::fuzzy_repair_mcp_double_underscore_dropped ... ok
+test scheduler::mtp_step::one_forward::tests::bootstrap_score_tests::bootstrap_score_single_fp32_uses_actual_dtype ... ok
+test scheduler::mtp_step::one_forward::tests::bootstrap_score_tests::bootstrap_score_batch_uses_each_processed_row ... ok
+test scheduler::mtp_step::one_forward::tests::bootstrap_score_tests::bootstrap_score_batch_read_failure_only_aborts_failed_member ... ok
+test scheduler::mtp_step::one_forward::tests::bootstrap_score_tests::bootstrap_score_single_bf16_uses_processed_row ... ok
+test tool_parser::tail::tests::streaming_leak::qwen3_coder_spurious_trailing_close_underscore_call_not_leaked ... ok
+test api::score::score_images::tests::base64_is_strict_and_bounded ... ok
+test scheduler::verify_pipeline_helper::scored::tests::scored_dense_thinking_boundary_commits_once_and_stops_at_rejection ... ok
+test scheduler::verify_dflash_step::split_head::tests::scored_split_thinking_boundary_commits_once_and_stops_at_rejection ... ok
+test scheduler::verify_pipeline_helper::scored::tests::dense_logprobs_report_the_biased_selection_distribution ... ok
+test scheduler::verify_pipeline_helper::scored::tests::processed_scores_match_serial_with_history_and_batched_row_offset ... ok
+
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 3105 filtered out; finished in 0.01s
+
