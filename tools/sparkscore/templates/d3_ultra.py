@@ -74,7 +74,11 @@ import json
 import string
 import uuid
 
+from tools.sparkscore.images import Geometry
 from tools.sparkscore.render import REVERSED, Branch, Rendered, Unsupported
+
+# One image placeholder in d3's image prompts (the processor's chat template), expanded to the image's pads.
+VISION_RUN = "<|vision_start|><|image_pad|><|vision_end|>"
 
 VERSION = "d3-ultra"
 TOKENIZER = "vllm-sr/d3-ultra"
@@ -288,6 +292,8 @@ class Renderer:
         self.permutation_average = permutation_average
         self.version = VERSION + ("+permutation-average" if permutation_average else "")
         self.labels, self.option_ids = answer_codes(self.hf)
+        self.image_pad = self.hf.convert_tokens_to_ids("<|image_pad|>")
+        self.geometry = Geometry()
         self.option_text = {i: self.hf.decode([i]) for i in self.option_ids}
         # The chat template trims the user turn; d3's user turn starts with the header title and ends with
         # the closing line, so the turn is the same cut at a placeholder.
@@ -341,12 +347,14 @@ class Renderer:
             raise ValueError("prompt has no question tokens after the state segment")
         return ids[:n], ids[n:]
 
-    def render(self, state, questions, knowledge=None, pack=False):
+    def render(self, state, questions, knowledge=None, pack=False, images=None):
         """questions: {name: question} as validated by the server. `knowledge`: text after d3's system
         prompt (a policy, a handbook). With `pack`, its tokens (the prompt's tokens up to the end of the
         knowledge) are returned apart as `Rendered.pack` and the prefix starts after them, for an engine
         that holds the pack (`ScoreBackend`); without, the knowledge is part of the prefix."""
         head, kend, pack_ids = self.knowledge_head(knowledge) if knowledge else (self.head, 0, [])
+        if images:
+            return self._render_images(state, questions, head, images)
         if pack and pack_ids:
             # The pack ends where the system turn's closing special token starts, and the tokenizer splits
             # at special tokens first, so the rest of the prompt tokenizes the same on its own: only the
@@ -391,6 +399,53 @@ class Renderer:
             for offset, piece in by_name.get(name, [(0, [])])
         ]
         return Rendered(prefix, branches, temperature=temperature_for(len(header)))
+
+    def _render_images(self, state, questions, head, images):
+        """d3_runtime's image path: each question's own prompt (no header) with one placeholder per image before
+        the user text, the placeholders expanded to each image's pads. Every placeholder sits in the state
+        block, which is the same for every question. Knowledge stays in the prefix (no pack)."""
+        if self.permutation_average:
+            raise Unsupported("permutation averaging is not supported with images")
+        normal = {name: normalize_question(q) for name, q in questions.items()}
+        header = [rendered for rendered, _ in normal.values() if rendered is not None]
+        pads = [self.geometry.pads(image.width, image.height) for image in images]
+        lead = "".join(VISION_RUN for _ in images)
+        prefix, pieces = None, {}
+        for name, (rendered, keys) in normal.items():
+            if len(keys) < 2:
+                continue
+            text = head + lead + user_prompt(state, rendered, self.labels) + self.tail
+            encoded = self._encode(text, offsets=True)
+            ids = encoded["input_ids"]
+            if ids.count(self.image_pad) != len(images):
+                raise Unsupported("the state or a question holds a literal image placeholder token")
+            n = state_token_count(encoded["offset_mapping"], state_end_char(text, state, len(head)))
+            expanded, cut = self._expand(ids, n, pads)
+            if prefix is None:
+                prefix = expanded[:cut]
+            elif expanded[:cut] != prefix:
+                raise ValueError("the questions of an image request have different state blocks")
+            pieces[name] = expanded[cut:]
+        branches = [
+            Branch(name, keys, pieces.get(name, []), self.option_ids[: len(keys)] if name in pieces else [], 0)
+            for name, (_, keys) in normal.items()
+        ]
+        return Rendered(prefix or [], branches, temperature=temperature_for(len(header)), images=list(images))
+
+    def _expand(self, ids, n, pads):
+        """`ids` with the k-th image pad repeated pads[k] times, and the state block's end after expanding."""
+        out, cut, k = [], None, 0
+        for i, token in enumerate(ids):
+            if i == n:
+                cut = len(out)
+            if token == self.image_pad:
+                out.extend([token] * pads[k])
+                k += 1
+            else:
+                out.append(token)
+        if cut is None or k != len(pads):
+            raise ValueError("image pads fall outside the state block")
+        return out, cut
 
     def _whole(self, texts):
         encoded = self._encode(texts, offsets=True)

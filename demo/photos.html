@@ -1,0 +1,149 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SparkScore · ask your photos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<link rel="stylesheet" href="vision.css">
+</head>
+<body>
+<div id="stage">
+  <div class="bg"><div class="grid"></div></div>
+  <header class="topbar">
+    <div class="brand"><span class="name">SparkScore</span><span class="sep"></span><span class="scene-title">Ask your photos</span></div>
+    <div class="chips"><span class="chip" id="count">– photos</span><span class="chip">d3-ultra · NVFP4</span><span class="chip">one DGX Spark</span></div>
+  </header>
+  <form class="ask panel" id="form">
+    <input id="question" spellcheck="false" autocomplete="off" value="Is there a dog in the photo?">
+    <button class="go" type="submit">Sort</button>
+  </form>
+  <div class="presets" id="presets"></div>
+  <div id="wall"></div>
+  <footer class="photo-stats panel">
+    <div class="stat"><div class="v" id="done">–</div><div class="k">photos scored</div></div>
+    <div class="stat"><div class="v" id="secs">–</div><div class="k">seconds</div></div>
+    <div class="stat"><div class="v" id="rate">–</div><div class="k">photos / s</div></div>
+    <div class="note">A yes / no question, read against every photo; the library sorts itself by the answer.<br>Drop a folder of your own photos anywhere on the page.</div>
+  </footer>
+  <div class="drop">Drop photos to replace the library</div>
+</div>
+<script src="vision.js"></script>
+<script>
+const PRESETS = ["Is there a dog in the photo?", "Is this a photo of food?", "Was this taken at night?",
+  "Is someone playing a sport?", "Would this work as a real-estate listing photo?", "Is there a vehicle in the photo?",
+  "Does the photo show a crowd?", "Is the photo blurry or badly exposed?"];
+const IN_FLIGHT = 16;
+const wall = document.getElementById("wall");
+let photos = [], run = 0;
+
+function layout() {
+  // Fit every tile into the wall: the largest square size whose grid holds them all.
+  const W = 1824, H = 640, n = photos.length;
+  let cols = 1;
+  while (Math.ceil(n / cols) * (W / cols) > H) cols++;
+  const step = W / cols, size = step - 8;
+  photos.forEach(p => { p.tile.style.width = p.tile.style.height = `${size}px`; });
+  return { cols, step };
+}
+
+function place() {
+  const { cols, step } = layout();
+  const order = [...photos].sort((a, b) => (b.p ?? -1) - (a.p ?? -1) || a.i - b.i);
+  const scored = photos.filter(p => p.p != null).length, finished = scored === photos.length;
+  order.forEach((p, rank) => {
+    p.tile.style.transform = `translate(${(rank % cols) * step}px, ${Math.floor(rank / cols) * step}px)`;
+    p.tile.classList.toggle("top", p.p != null && rank < 5 && p.p > 0.5);
+    p.tile.classList.toggle("dim", finished && p.p != null && p.p < 0.2);
+  });
+}
+
+function show(list) {
+  wall.innerHTML = "";
+  photos = list.map((item, i) => {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.innerHTML = `<img alt=""><div class="bar"></div><div class="p"></div>`;
+    tile.querySelector("img").src = item.url;
+    if (item.license) tile.title = `${item.caption}\n${item.license} · ${item.source}`;
+    wall.appendChild(tile);
+    return { ...item, i, tile, p: null, data: null };
+  });
+  document.getElementById("count").textContent = `${photos.length} photos`;
+  place();
+}
+
+let placeTimer = 0;
+function placeSoon() { if (!placeTimer) placeTimer = setTimeout(() => { placeTimer = 0; place(); }, 200); }
+
+async function sort(question) {
+  const id = ++run;
+  photos.forEach(p => { p.p = null; p.tile.classList.remove("scored", "dim", "top"); p.tile.querySelector(".bar").style.width = "0"; });
+  place();
+  const t0 = performance.now();
+  let next = 0, done = 0;
+  const stat = () => {
+    const s = (performance.now() - t0) / 1000;
+    document.getElementById("done").textContent = `${done} / ${photos.length}`;
+    document.getElementById("secs").textContent = s.toFixed(1);
+    document.getElementById("rate").textContent = done ? (done / s).toFixed(1) : "–";
+  };
+  const worker = async () => {
+    while (next < photos.length && id === run) {
+      const p = photos[next++];
+      p.data ??= await Vision.dataURL(p.file instanceof Blob ? p.file : p.url);
+      let label;
+      try {
+        const { answers } = await Vision.ask({ state: "", images: [p.data], questions: { q: { type: "noul", instructions: question } } });
+        if (id !== run) return;
+        p.p = answers.q.noul; label = `${Math.round(p.p * 100)}%`;
+      } catch (e) {
+        if (id !== run) return;
+        p.p = 0; label = "error"; p.tile.title = String(e.message || e);
+      }
+      done++;
+      p.tile.querySelector(".p").textContent = label;
+      p.tile.querySelector(".bar").style.width = `${p.p * 100}%`;
+      p.tile.classList.add("scored");
+      stat(); placeSoon();
+    }
+  };
+  const timer = setInterval(() => id === run && done < photos.length ? stat() : clearInterval(timer), 100);
+  await Promise.all(Array.from({ length: IN_FLIGHT }, worker));
+  if (id === run) { stat(); place(); }
+}
+
+document.getElementById("form").addEventListener("submit", e => { e.preventDefault(); sort(document.getElementById("question").value.trim()); });
+const presets = document.getElementById("presets");
+PRESETS.forEach(q => {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = q;
+  b.onclick = () => { document.getElementById("question").value = q; sort(q); };
+  presets.appendChild(b);
+});
+
+// Drop photos (or a folder) to replace the library; large photos are downscaled to 1280 px before sending.
+const stage = document.getElementById("stage");
+addEventListener("dragover", e => { e.preventDefault(); stage.classList.add("dragging"); });
+addEventListener("dragleave", e => { if (!e.relatedTarget) stage.classList.remove("dragging"); });
+addEventListener("drop", async e => {
+  e.preventDefault(); stage.classList.remove("dragging");
+  const files = [];
+  const walk = async entry => {
+    if (entry.isFile) { const f = await new Promise(r => entry.file(r)); if (/^image\/(jpeg|png|webp)$/.test(f.type)) files.push(f); }
+    else if (entry.isDirectory) { const reader = entry.createReader(); let batch;
+      while ((batch = await new Promise(r => reader.readEntries(r))).length) for (const x of batch) await walk(x); }
+  };
+  await Promise.all([...e.dataTransfer.items].map(i => i.webkitGetAsEntry()).filter(Boolean).map(walk));
+  if (files.length) { run++; show(files.slice(0, 400).map(f => ({ file: f, url: URL.createObjectURL(f) }))); }
+});
+
+Vision.fitStage();
+// The first ?n= photos of the library (default 120; firehose.html pours in the rest).
+const N = +(new URLSearchParams(location.search).get("n") || 120);
+Vision.library().then(list => show(list.slice(0, N))).catch(e => { document.getElementById("count").textContent = e.message; });
+</script>
+</body>
+</html>

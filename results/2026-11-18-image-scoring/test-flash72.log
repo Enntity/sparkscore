@@ -1,0 +1,17 @@
+warning: atlas-kernels@1.0.0-beta-preview: atlas-kernels: compiled 213 kernels for target 0 (gb10, qwen3.8-27b, nvfp4) (18 model-specific overrides)
+warning: atlas-kernels@1.0.0-beta-preview: atlas-kernels: dedup+parallel: 213/213 unique nvcc invocations (0 cache hits, 1.0× dedup), 20 parallel workers
+warning: atlas-kernels@1.0.0-beta-preview: closure: unresolved include (kernels/gb10/qwen3.6-27b/nvfp4/q4k_vendor/common.cuh -> vendors/hip.h)
+warning: atlas-kernels@1.0.0-beta-preview: closure: unresolved include (kernels/gb10/qwen3.6-27b/nvfp4/q4k_vendor/common.cuh -> vendors/musa.h)
+    Finished `release` profile [optimized] target(s) in 0.90s
+     Running unittests src/lib.rs (target/release/deps/spark_model-8a94bb41185fe3dc)
+
+running 1 test
+seq 4: max |flash - fp64| = 0.00481, mean 0.001012
+seq 40: max |flash - fp64| = 0.00421, mean 0.000526
+seq 64: max |flash - fp64| = 0.00362, mean 0.000445
+seq 300: max |flash - fp64| = 0.00215, mean 0.000234
+seq 1028: max |flash - fp64| = 0.00220, mean 0.000137
+test layers::vision_encoder::vit_flash72_gpu_tests::vit_flash_attention_d72_matches_fp64_reference ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2561 filtered out; finished in 0.83s
+

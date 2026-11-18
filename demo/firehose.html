@@ -1,0 +1,399 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SparkScore · photo firehose</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<link rel="stylesheet" href="vision.css">
+</head>
+<body>
+<!-- The firehose: photos arrive large, one per key press, each answered and thrown into a bucket of thumbnails
+     sorted by the answer; then play streams them in at full speed up to the next stop (?stops=125,250,500); new
+     questions re-sort the whole bucket live, the top matches large on the left. The presenter drives it (H hides
+     the key line). The server remembers every photo it reads, so a take that reads them fresh needs a fresh server. -->
+<div id="stage">
+  <div class="bg"><div class="grid"></div></div>
+  <header class="topbar">
+    <div class="brand"><span class="name">SparkScore</span><span class="sep"></span><span class="scene-title">Photo firehose</span></div>
+    <div class="chips"><span class="chip" id="count">– photos</span><span class="chip">d3-ultra · NVFP4</span><span class="chip">one DGX Spark</span></div>
+  </header>
+  <form class="fh-ask panel" id="form">
+    <span class="fh-label">Question</span>
+    <input id="question" spellcheck="false" autocomplete="off">
+    <span class="fh-phase" id="phase">ready</span>
+  </form>
+  <div class="fh-presets" id="presets"></div>
+  <section class="fh-in panel" id="left">
+    <div class="fh-in-head"><span id="in-label">Incoming</span><span id="in-name"></span></div>
+    <div class="fh-incoming">
+      <div class="fh-big"><img id="big-img" alt=""><div class="fh-wait" id="big-wait"></div></div>
+      <div class="fh-score"><div class="fh-pct" id="big-pct">–</div><div class="fh-meter"><div id="big-bar"></div></div></div>
+      <div class="fh-caption" id="big-caption"></div>
+    </div>
+    <div class="fh-top" id="top"></div>
+  </section>
+  <section class="fh-bucket panel"><div id="bucket"></div></section>
+  <div class="fh-peek" id="peek"><img alt=""><div class="row"><span class="pct"></span><span class="cap"></span></div></div>
+  <footer class="photo-stats panel">
+    <div class="stat"><div class="v" id="done">–</div><div class="k">photos answered</div></div>
+    <div class="stat"><div class="v" id="rate">–</div><div class="k">photos / s</div></div>
+    <div class="stat"><div class="v" id="built">0</div><div class="k">new photos read</div></div>
+    <div class="stat"><div class="v" id="kept">0</div><div class="k">answered from memory</div></div>
+    <div class="note" id="keys">N next photo · Space play / pause (to <span id="next-stop"></span>) · 1–6 re-sort by a question<br>
+      Enter asks the typed question · R reset · H hide this line</div>
+  </footer>
+</div>
+<script src="vision.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const STOPS = (params.get("stops") || "125,250,500").split(",").map(Number);
+const FIRST_Q = params.get("q") || "Is there a dog in the photo?";
+const PRESETS = ["Is this a photo of food?", "Is someone playing a sport?", "Was this taken at night?",
+  "Is there a vehicle in the photo?", "Is there an animal in the photo?", "Is there a dog in the photo?"];
+const IN_FLIGHT = 16, TOP = 9;
+
+const $ = id => document.getElementById(id);
+const bucket = $("bucket");
+let all = [], shown = [], queue = [];
+let question = FIRST_Q, epoch = 0, mode = "ready", target = STOPS[0];
+let big = null;        // the photo in the big view, not yet in the bucket
+let built = 0, kept = 0, lastRate = 0;
+
+// ---------------------------------------------------------------- rate: answers a second, last 5 s of this phase
+let answeredAt = [], phaseAt = 0;
+function perSecond() {
+  const now = performance.now(), w = Math.min(5000, now - phaseAt);
+  answeredAt = answeredAt.filter(t => t > now - 5000);
+  return w > 600 ? answeredAt.filter(t => t > now - w).length / (w / 1000) : 0;
+}
+
+// ---------------------------------------------------------------- the bucket
+const BW = 1000, BH = 614, BX = 832 + 20, BY = 250 + 20;
+// Sized for the next stop (not only the photos in yet), so tiles fill in place instead of reflowing.
+function grid() {
+  const n = Math.max(shown.length, target, 1);
+  let cols = 1;
+  while (Math.ceil(n / cols) * (BW / cols) > BH) cols++;
+  const step = BW / cols;
+  return { cols, step, size: step - Math.max(2, Math.round(step * 0.06)) };
+}
+const score = p => p.answers[question];
+const ranked = () => [...shown].sort((a, b) => (score(b) ?? -1) - (score(a) ?? -1) || a.order - b.order);
+function place() {
+  placeTimer = 0;
+  const { cols, step, size } = grid();
+  const answered = shown.filter(p => score(p) != null).length, finished = answered === shown.length && mode !== "play";
+  ranked().forEach((p, rank) => {
+    p.order = rank;
+    p.x = (rank % cols) * step; p.y = Math.floor(rank / cols) * step; p.size = size;
+    const t = p.tile, s = score(p);
+    t.style.width = t.style.height = `${size}px`;
+    t.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    t.classList.toggle("small", size < 64);
+    t.classList.toggle("stale", s == null);
+    t.classList.toggle("top", s != null && rank < TOP && s > 0.5);
+    t.classList.toggle("dim", finished && s != null && s < 0.2);
+    t.querySelector(".bar").style.width = `${(s ?? 0) * 100}%`;
+    t.querySelector(".p").textContent = s == null ? "" : `${Math.round(s * 100)}%`;
+  });
+  stats();
+}
+let placeTimer = 0;
+const placeSoon = () => { placeTimer ||= setTimeout(place, 120); };
+
+function addTile(p) {
+  const t = document.createElement("div");
+  t.className = "tile fh-tile landing";
+  t.innerHTML = `<img alt="" src="${p.url}"><div class="bar"></div><div class="p"></div>`;
+  t.dataset.i = p.i;
+  p.tile = t; p.order = shown.length;
+  bucket.appendChild(t);
+  shown.push(p);
+}
+
+// ---------------------------------------------------------------- the left panel: one photo large, or the top matches
+const BIG = { x: 48 + 24, y: 250 + 58, w: 712, h: 478 };
+function leftView(view) {
+  $("left").classList.toggle("show-top", view === "top");
+  $("in-label").textContent = view === "top" ? "Top matches" : "Incoming";
+  if (view === "top") $("in-name").textContent = "";
+}
+function showBig(p, s) {
+  leftView("incoming");
+  $("big-img").src = p.url;
+  $("in-name").textContent = `photo ${p.i + 1}`;
+  $("big-caption").textContent = p.caption ? `“${p.caption.trim()}”` : "";
+  $("big-wait").classList.toggle("on", s == null);
+  $("big-pct").textContent = s == null ? "…" : `${Math.round(s * 100)}%`;
+  $("big-pct").classList.toggle("hot", s != null && s > 0.5);
+  $("big-bar").style.width = `${(s ?? 0) * 100}%`;
+}
+const topCells = [];
+function showTop() {
+  topTimer = 0;
+  const best = ranked().filter(p => score(p) != null).slice(0, TOP);
+  topCells.forEach((c, k) => {
+    const p = best[k];
+    c.classList.toggle("empty", !p);
+    if (!p) return;
+    if (c.dataset.i !== String(p.i)) { c.dataset.i = p.i; c.querySelector("img").src = p.url; }
+    const s = score(p);
+    c.querySelector(".pct").textContent = `${Math.round(s * 100)}%`;
+    c.classList.toggle("hot", s > 0.5);
+  });
+}
+let topTimer = 0;
+const topSoon = () => { topTimer ||= setTimeout(showTop, 150); };
+
+let flying = 0;
+function fly(p) {
+  const t = p.tile;
+  place();
+  if (flying >= 8) { t.classList.remove("landing"); return; }   // past 8 in the air, tiles just appear
+  flying++;
+  const f = document.createElement("img");
+  f.className = "fh-fly"; f.src = p.url;
+  $("stage").appendChild(f);
+  const to = { x: BX + p.x, y: BY + p.y, w: p.size, h: p.size };
+  const box = r => ({ left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+  f.animate([{ ...box(BIG), borderRadius: "18px" }, { ...box(to), borderRadius: "8px" }],
+            { duration: mode === "play" ? 420 : 650, easing: "cubic-bezier(.3,.7,.2,1)" })
+   .finished.then(() => { f.remove(); flying--; t.classList.remove("landing"); });
+}
+// The photo in the big view goes into the bucket.
+function settleBig() {
+  if (big && !big.tile && score(big) != null) { addTile(big); fly(big); }
+  big = null;
+}
+
+// ---------------------------------------------------------------- asking
+// Every action starts here: the action it interrupts first gives back the photos it took from the queue.
+let giveBack = null;
+function begin() {
+  giveBack?.();
+  giveBack = null;
+  return ++epoch;
+}
+// An answer from action `my`; counted (rate, read / remembered) only while that action is current.
+async function answer(p, q, my) {
+  p.data ??= await Vision.dataURL(p.url);
+  const r = await Vision.ask({ state: "", images: [p.data], questions: { q: { type: "noul", instructions: q } } });
+  if (my === epoch) {
+    if (r.pack === "built") built++; else if (r.pack === "held") kept++;
+    answeredAt.push(performance.now());
+  }
+  return r.answers.q.noul;
+}
+// Worth asking again: no answer from the network, the server failing or busy; a few times at most.
+const retryable = (p, e) => (!e.status || e.status >= 500 || e.status === 429) && (p.fails = (p.fails || 0) + 1) < 4;
+const nextStop = () => STOPS.find(s => s > shown.length + (big ? 1 : 0)) ?? all.length;
+
+// N: the next photo, large; it stays up (with its answer) until the next key.
+async function next() {
+  if (mode === "next-wait") return;
+  const my = begin();
+  settleBig();
+  const p = queue.shift();
+  if (!p) return setMode("done");
+  target = Math.max(target, nextStop());
+  setMode("next-wait");
+  big = p;
+  giveBack = () => { if (big === p && score(p) == null) { big = null; queue.unshift(p); } };
+  showBig(p, null);
+  let s = score(p);
+  if (s == null) {
+    try { s = await answer(p, question, my); } catch (e) { console.warn(e); }
+  }
+  if (my !== epoch) return;                      // interrupted: begin() gave it back
+  giveBack = null;
+  if (s == null) { big = null; queue.unshift(p); return setMode("ready"); }
+  p.answers[question] = s;
+  showBig(p, s);
+  setMode("next");
+}
+
+// Space: full speed to the next stop. Answers come back a pass at a time (16 photos merged); they are let out
+// one by one at the measured rate, so the stream shows every photo, as fast as the engine reads them.
+async function play() {
+  const my = begin();
+  settleBig();
+  target = nextStop();
+  setMode("play");
+  phaseAt = performance.now();
+  place();
+  const take = queue.splice(0, Math.max(0, target - shown.length));
+  const ready = take.filter(p => score(p) != null), todo = take.filter(p => score(p) == null);
+  // Paused or interrupted: what was not shown goes back to the front at once, answered or not (photos still
+  // being asked follow when their answers land).
+  giveBack = () => queue.unshift(...ready.splice(0), ...todo.splice(0));
+  let asking = 0;
+  for (let k = 0; k < IN_FLIGHT; k++) (async () => {
+    while (todo.length && my === epoch) {
+      const p = todo.shift();
+      asking++;
+      try {
+        p.answers[question] = await answer(p, question, my);
+        if (my === epoch) ready.push(p); else queue.unshift(p);
+      } catch (e) {
+        console.warn(e);
+        if (my !== epoch) queue.unshift(p);
+        else if (retryable(p, e)) { todo.push(p); await Vision.sleep(500); }
+        else console.warn(`photo ${p.i + 1} dropped after ${p.fails || 1} failures`);
+      } finally { asking--; }
+    }
+  })();
+  // Hold the stream until the first pass is in (the first photo scans meanwhile), so it starts steady.
+  if (todo.length && take.length) {
+    showBig(take[0], null);
+    while (my === epoch && ready.length < Math.min(8, take.length) && (todo.length || asking)) await Vision.sleep(25);
+  }
+  while (my === epoch && shown.length < target && (ready.length || todo.length || asking)) {
+    if (!ready.length) { await Vision.sleep(25); continue; }
+    const p = ready.shift();
+    addTile(p); showBig(p, score(p)); fly(p);
+    const r = performance.now() - phaseAt > 2000 ? perSecond() : 0;   // the first 2 s have too few answers to tell
+    let gap = r > 0.5 ? 1000 / r : 160;
+    if (ready.length > 32) gap *= 0.6;                // behind: catch up
+    else if (ready.length < 6 && (todo.length || asking)) gap *= 1 + (6 - ready.length) * 0.12;   // stretch, don't stall
+    await Vision.sleep(Math.max(25, Math.min(600, gap)));
+  }
+  if (my !== epoch) return;
+  giveBack = null;
+  place();
+  setMode(queue.length ? "stopped" : "done");
+}
+
+// 1-6 / Enter: every photo in the bucket asked `q` at full speed; the bucket re-sorts as the answers land and the
+// top matches fill the left panel.
+async function resort(q) {
+  const my = begin();
+  settleBig();
+  question = q; $("question").value = q;
+  markPreset();
+  setMode("resort");
+  phaseAt = performance.now();
+  shown.forEach(p => delete p.answers[q]);
+  leftView("top");
+  place(); showTop();
+  const todo = ranked();
+  await Promise.all(Array.from({ length: IN_FLIGHT }, async () => {
+    while (todo.length && my === epoch) {
+      const p = todo.shift();
+      let s;
+      try { s = await answer(p, q, my); }
+      catch (e) {
+        console.warn(e);
+        if (my === epoch && retryable(p, e)) { todo.push(p); await Vision.sleep(500); }
+        continue;
+      }
+      if (my !== epoch) return;
+      p.answers[q] = s;
+      placeSoon(); topSoon();
+    }
+  }));
+  if (my !== epoch) return;
+  lastRate = shown.length / ((performance.now() - phaseAt) / 1000);   // the whole re-sort, wall clock
+  setMode("done");
+  place(); showTop();
+}
+
+// ---------------------------------------------------------------- chrome
+function setMode(m) {
+  if (m !== mode) phaseAt = performance.now();
+  mode = m;
+  const label = { ready: "ready", next: "one at a time", "next-wait": "one at a time", play: `full speed → ${target}`,
+    stopped: "stopped", resort: "re-sorting", done: "done", paused: "paused" }[m] || m;
+  $("phase").textContent = label;
+  $("phase").className = `fh-phase ${m}`;
+  $("next-stop").textContent = nextStop();
+}
+function stats() {
+  $("count").textContent = `${shown.length} photos`;
+  const answered = shown.filter(p => score(p) != null).length;
+  $("done").textContent = mode === "play" ? `${shown.length} / ${target}` : `${answered} / ${shown.length}`;
+  const r = perSecond();
+  if (["play", "resort"].includes(mode)) lastRate = r;
+  $("rate").textContent = lastRate ? lastRate.toFixed(1) : "–";
+  $("built").textContent = built; $("kept").textContent = kept;
+}
+setInterval(stats, 250);
+
+function markPreset() {
+  document.querySelectorAll("#presets button").forEach((b, k) => b.classList.toggle("on", PRESETS[k] === question));
+}
+PRESETS.forEach((q, k) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = `${k + 1}  ${q}`;
+  b.onclick = () => resort(q);
+  $("presets").appendChild(b);
+});
+for (let k = 0; k < TOP; k++) {
+  const c = document.createElement("div");
+  c.className = "fh-top-cell empty";
+  c.innerHTML = `<img alt=""><span class="rank">${k + 1}</span><span class="pct"></span>`;
+  $("top").appendChild(c); topCells.push(c);
+}
+
+function reset() {
+  begin();
+  question = FIRST_Q; $("question").value = question; markPreset();
+  bucket.innerHTML = ""; shown = []; big = null; built = 0; kept = 0; answeredAt = []; lastRate = 0;
+  all.forEach(p => { p.answers = {}; p.tile = null; });
+  queue = [...all]; target = STOPS[0];
+  $("big-img").removeAttribute("src"); $("big-pct").textContent = "–"; $("big-bar").style.width = "0";
+  $("big-wait").classList.remove("on");
+  $("big-caption").textContent = ""; $("in-name").textContent = "";
+  leftView("incoming");
+  setMode("ready"); place();
+}
+
+addEventListener("keydown", e => {
+  if (e.target === $("question")) return;
+  const k = e.key.toLowerCase();
+  if (k === "n" || k === "arrowright") next();
+  else if (k === " ") {
+    if (mode === "play") { begin(); setMode("paused"); }
+    else play();
+  }
+  else if (k >= "1" && k <= String(PRESETS.length)) resort(PRESETS[+k - 1]);
+  else if (k === "r") reset();
+  else if (k === "h") $("keys").classList.toggle("hidden");
+  else return;
+  e.preventDefault();
+});
+$("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const q = $("question").value.trim();
+  $("question").blur();
+  if (q) resort(q);
+});
+
+// Hover: the photo, large, beside its tile.
+const peek = $("peek");
+bucket.addEventListener("mouseover", e => {
+  const t = e.target.closest(".tile");
+  if (!t) return;
+  const p = all[+t.dataset.i], s = score(p);
+  peek.querySelector("img").src = p.url;
+  peek.querySelector(".pct").textContent = s == null ? "" : `${Math.round(s * 100)}%`;
+  peek.querySelector(".cap").textContent = p.caption ? p.caption.trim() : "";
+  const x = BX + p.x, y = BY + p.y, W = 560, H = 470;
+  const left = x - W - 24 > 24 ? x - W - 24 : Math.min(x + p.size + 24, 1920 - W - 24);
+  peek.style.left = `${left}px`;
+  peek.style.top = `${Math.max(250, Math.min(y + p.size / 2 - H / 2, 1080 - H - 24))}px`;   // below the question
+  peek.classList.add("on");
+});
+bucket.addEventListener("mouseout", e => { if (!e.relatedTarget?.closest?.(".tile")) peek.classList.remove("on"); });
+
+Vision.fitStage();
+Vision.library().then(list => {
+  all = list.map((p, i) => ({ ...p, i, answers: {}, data: null, tile: null }));
+  reset();
+}).catch(e => { $("count").textContent = e.message; });
+</script>
+</body>
+</html>

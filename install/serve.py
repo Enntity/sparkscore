@@ -3,7 +3,7 @@
 on 0.0.0.0:8015, both from the serve block in checkpoints.json.
 
     serve.py [--checkpoint d3-ultra-nvfp4] [--model /model] [--precision w4a4|w4a8] [--packs N]
-             [--knowledge-dir /knowledge]
+             [--knowledge-dir /knowledge] [--store-gb G [--store-disk-gb D]]
     serve.py --print       show the two command lines and the engine environment, then exit
 
 Atlas stays on the container's loopback; only the harness port is published.
@@ -12,6 +12,14 @@ its status. SPARKSCORE_API_KEY, if set, is passed to the harness (bearer key).
 --packs N (SPARKSCORE_PACKS) replaces the serve block's --score-packs (0: knowledge
 packs off). Documents in --knowledge-dir (default /knowledge, mounted by
 ./start.sh from KNOWLEDGE_DIR) are loaded by name and their packs built at startup.
+
+The photo library: --store-gb G (SPARKSCORE_STORE_GB) keeps every image pack
+Atlas builds, FP8, in G GiB of device memory (a 640x480 photo takes about
+50 MB), so a photo asked a new question skips its encoding. The store is held
+outside Atlas's memory budget, so the budget drops to STORE_UTIL. With
+--store-disk-gb D (SPARKSCORE_STORE_DISK_GB) and a directory mounted at
+--store-dir (/store, ./start.sh mounts STORE_DIR there), packs evicted from
+device memory go to D GiB of NVMe and are read back ahead of their passes.
 """
 import argparse
 import json
@@ -28,6 +36,9 @@ ATLAS_PORT = 8081
 # The one setting --precision changes: W4A8 keeps E4M3 tokens for the MLP and
 # attention (LOWP=1); W4A4 (the default) uses NVFP4 tokens there.
 PRECISION = {"w4a4": "gu,dn,qkv,o,qkvz,gout", "w4a8": "1"}
+# Atlas's memory budget beside a pack store: 0.70 of a DGX Spark's 128 GB leaves
+# room for a 20 GiB store and the rest of the machine.
+STORE_UTIL = 0.70
 
 
 def commands(args):
@@ -43,6 +54,13 @@ def commands(args):
             i = flags.index("--score-packs")
             del flags[i:i + 2]
         flags += ["--score-packs", str(args.packs)]
+    if args.store_gb > 0:
+        env["ATLAS_SCORE_STORE_GB"] = f"{args.store_gb:g}"
+        i = flags.index("--gpu-memory-utilization")
+        flags[i + 1] = f"{min(float(flags[i + 1]), STORE_UTIL):.2f}"
+        if args.store_disk_gb > 0:
+            env["ATLAS_SCORE_STORE_DIR"] = args.store_dir
+            env["ATLAS_SCORE_STORE_DISK_GB"] = f"{args.store_disk_gb:g}"
     atlas = ["spark", "serve", "--model-from-path", args.model, "--model-name", "m",
              "--port", str(ATLAS_PORT), *flags]
     harness = [sys.executable, "-m", "tools.sparkscore.server", "--backend", "score",
@@ -78,6 +96,11 @@ def main():
     ap.add_argument("--packs", type=int, default=int(os.environ["SPARKSCORE_PACKS"]) if os.environ.get("SPARKSCORE_PACKS") else None,
                     help="knowledge packs Atlas holds (replaces the serve block's --score-packs; 0: off)")
     ap.add_argument("--knowledge-dir", default=os.environ.get("SPARKSCORE_KNOWLEDGE_DIR", "/knowledge"))
+    ap.add_argument("--store-gb", type=float, default=float(os.environ.get("SPARKSCORE_STORE_GB") or 0),
+                    help="device memory for the image pack store, GiB (0: off)")
+    ap.add_argument("--store-disk-gb", type=float, default=float(os.environ.get("SPARKSCORE_STORE_DISK_GB") or 0),
+                    help="the store's NVMe tier in --store-dir, GiB (0: off; needs --store-gb)")
+    ap.add_argument("--store-dir", default="/store", help="a directory on NVMe for the store's tier (mounted)")
     ap.add_argument("--print", action="store_true")
     args = ap.parse_args()
     env, atlas, harness = commands(args)

@@ -4,6 +4,8 @@
     python3 demo/record.py inbox guard typing claims title:intro title:outro
     python3 demo/record.py --montage
     python3 demo/record.py title:s5 packs title:packs --cut knowledge-packs   # the knowledge-pack feature video
+    python3 demo/record.py --take firehose      # firehose.html played by a take (keys, as a presenter would)
+    python3 demo/record.py --take watch         # watch.html: the video dashboard through the film's scenes
 
 Needs demo/serve.py running (default http://127.0.0.1:8780) and Python
 Playwright. Frames come from a CDP screencast at high JPEG quality and are
@@ -29,11 +31,17 @@ ENCODE = ["-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-crf", "1
           "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-movflags", "+faststart"]
 
 
-async def capture(url, frames_dir, tail_ms=700, timeout_s=180):
+async def capture(url, frames_dir, tail_ms=700, timeout_s=180, drive=None, ready="window.__ready === true", channel=None):
+    """Screencast `url` from `ready` until the page says it is done (autoplay), or until `drive(page)`, a
+    take that presses the keys, returns. `channel` "chrome" uses the installed Chrome (H.264 decoded by
+    the hardware, which a video page needs to keep its pace while recorded)."""
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(args=["--force-color-profile=srgb", "--disable-background-timer-throttling", "--disable-renderer-backgrounding"])
+        args = ["--force-color-profile=srgb", "--disable-background-timer-throttling", "--disable-renderer-backgrounding"]
+        if channel:
+            args.append("--window-size=1920,1080")  # Chrome's headless window, or it screencasts 1920x993
+        browser = await p.chromium.launch(channel=channel, args=args)
         page = await browser.new_page(viewport={"width": 1920, "height": 1080}, device_scale_factor=1)
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -50,9 +58,12 @@ async def capture(url, frames_dir, tail_ms=700, timeout_s=180):
 
         cdp.on("Page.screencastFrame", on_frame)
         await page.goto(url)
-        await page.wait_for_function("window.__ready === true", timeout=30000)
+        await page.wait_for_function(ready, timeout=30000)
         await cdp.send("Page.startScreencast", {"format": "jpeg", "quality": 95, "maxWidth": 1920, "maxHeight": 1080, "everyNthFrame": 1})
-        await page.wait_for_function("window.__demoDone === true", timeout=timeout_s * 1000, polling=100)
+        if drive:
+            await asyncio.wait_for(drive(page), timeout_s)
+        else:
+            await page.wait_for_function("window.__demoDone === true", timeout=timeout_s * 1000, polling=100)
         await asyncio.sleep(tail_ms / 1000)
         await cdp.send("Page.stopScreencast")
         calls = await page.evaluate("window.__calls")
@@ -116,6 +127,129 @@ def record(name, base):
     print(f"{out_path}: {dur:.1f}s, {len(frames)} frames captured ({len(frames) / span:.1f}/s), {len(calls)} live calls")
 
 
+async def firehose_take(page):
+    """The firehose video: three photos one at a time (titled slow motion), play to 125, two re-sorts and a
+    look at the best match, play to 250, two more re-sorts; captions tell the story (take_overlay.js), with
+    the numbers measured as it runs. Each photo is new to a freshly started server."""
+    await page.add_script_tag(path=os.path.join(HERE, "take_overlay.js"))
+    ov = lambda js: page.evaluate(f"window.__ov.{js}")
+    cap = lambda kicker, text, slow=False: ov(f"caption({json.dumps(kicker)}, {json.dumps(text)}, {json.dumps(slow)})")
+
+    async def until(*states, timeout_s=180):
+        await page.wait_for_function(f"{json.dumps(states)}.includes(mode)", timeout=timeout_s * 1000, polling=50)
+
+    async def resort(key):
+        t0 = asyncio.get_running_loop().time()
+        await page.keyboard.press(key)
+        await until("done")
+        return asyncio.get_running_loop().time() - t0
+
+    async def play():
+        await ov("fast()")
+        await page.keyboard.press("Space")
+        t0 = asyncio.get_running_loop().time()
+        await asyncio.sleep(2.0)
+        return t0
+
+    # Slow motion: one photo at a time.
+    await ov("slow(true)")
+    await asyncio.sleep(0.8)
+    await cap("Slow motion", "Each photo is read by d3-ultra and answered: is there a dog in it?", slow=True)
+    await asyncio.sleep(1.2)
+    for _ in range(3):
+        await page.keyboard.press("n")
+        await until("next")
+        await asyncio.sleep(2.8)
+    await ov("hide()")
+
+    # Full speed to 125.
+    t0 = await play()
+    await cap("Full speed", "Now the real rate: every photo read live, on one DGX Spark")
+    await until("stopped", "done")
+    secs = asyncio.get_running_loop().time() - t0
+    n = await page.evaluate("shown.length")
+    await ov("live(false)")
+    await cap(f"{n} photos in", f"Read and answered in {secs:.0f} s. Each photo is remembered: now ask them something new")
+    await asyncio.sleep(3.2)
+
+    # Re-sorts from memory.
+    await cap("New question", "Every photo answered again, from memory. The top 9 on the left")
+    dt = await resort("1")
+    await cap("Re-sorted", f"{n} photos, a new question, {dt:.1f} s")
+    await asyncio.sleep(3.0)
+    await cap("Another one", "Is someone playing a sport?")
+    dt = await resort("2")
+    await asyncio.sleep(1.0)
+    await cap("Check it", "Hover any photo to see it, and its answer, up close")
+    x, y = await page.evaluate("(() => { const r = ranked()[0].tile.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()")
+    await page.mouse.move(x, y, steps=12)
+    await asyncio.sleep(2.8)
+    await page.mouse.move(1900, 1060, steps=8)
+
+    # Double the library at full speed.
+    await cap("Double it", "More photos the Spark has never seen")
+    await asyncio.sleep(2.2)
+    await ov("hide()")
+    t0 = await play()
+    await cap("Full speed", "New photos stream in live; the bucket stays sorted as they land")
+    await until("stopped", "done")
+    secs = asyncio.get_running_loop().time() - t0
+    n2 = await page.evaluate("shown.length")
+    await ov("live(false)")
+    await cap(f"{n2} photos", f"{n2 - n} more read in {secs:.0f} s. Two more questions, across all {n2}")
+    await asyncio.sleep(3.0)
+    dt = await resort("3")
+    await cap("Re-sorted", f"{n2} photos, answered from memory in {dt:.1f} s")
+    await asyncio.sleep(2.8)
+    await cap("Last one", "Is there a vehicle in the photo?")
+    dt = await resort("4")
+    await cap("SparkScore on one DGX Spark", f"Any question, the whole library, {n2 / dt:.0f} photos a second. Nothing sped up")
+    await asyncio.sleep(4.0)
+
+
+async def watch_take(page):
+    """The video dashboard: about 15 s of each of the film's six scenes (keys 1-6), with captions placed like
+    subtitles over the film so the dashboard stays clear."""
+    await page.add_script_tag(path=os.path.join(HERE, "take_overlay.js"))
+    await page.evaluate("document.querySelector('#ov .cap').style.bottom = '500px'")
+    cap = lambda kicker, text: page.evaluate(f"window.__ov.caption({json.dumps(kicker)}, {json.dumps(text)})")
+    fps = lambda: page.evaluate("document.getElementById('fps').textContent")
+    scenes = [
+        ("1", "Live", "Every frame the Spark can take is asked ten questions in one request"),
+        ("2", "Action", "Weapons, people, setting and tension, read from each frame"),
+        ("3", "Faces", "Emotion as a distribution, not a label: watch the river below"),
+        ("4", "Cuts", "Answers trail their frame by about half a second: the corner shows the frame answered"),
+        ("5", "Battle", "Fire, robots and fighting light up as they appear"),
+        ("6", "One DGX Spark", None),
+    ]
+    await asyncio.sleep(1.0)
+    for key, kicker, text in scenes:
+        await page.keyboard.press(key)
+        await asyncio.sleep(2.5)
+        await cap(kicker, text or f"{await fps()} frames a second, ten answers each, as the film plays. Nothing sped up")
+        await asyncio.sleep(13.0)
+    await page.evaluate("window.__ov.hide()")
+    await asyncio.sleep(1.0)
+
+
+# name -> (page, take, ready condition, browser channel)
+TAKES = {
+    "firehose": ("firehose.html", firehose_take, "typeof all !== 'undefined' && all.length > 0", None),
+    "watch": ("watch.html", watch_take, "document.getElementById('video').readyState >= 1", "chrome"),
+}
+
+
+def take(name, base):
+    page_path, drive, ready, channel = TAKES[name]
+    warm(base)
+    out_path = os.path.join(OUT, f"take-{name}.mp4")
+    with tempfile.TemporaryDirectory(prefix="sparkscore-frames-") as tmp:
+        frames, _ = asyncio.run(capture(f"{base}/{page_path}", tmp, tail_ms=500, timeout_s=900, drive=drive, ready=ready,
+                                        channel=channel))
+        dur = encode(frames, tmp, out_path)
+    print(f"{out_path}: {dur:.1f}s, {len(frames)} frames captured ({len(frames) / (frames[-1] - frames[0]):.1f}/s)")
+
+
 # Cuts: (clip, start s, end s) from the recorded clips, each with a short
 # fade, joined with dips to black.
 CUTS = {
@@ -163,6 +297,7 @@ def main():
     ap.add_argument("--base", default="http://127.0.0.1:8780")
     ap.add_argument("--montage", action="store_true", help="cut the montage from recorded clips")
     ap.add_argument("--cut", choices=sorted(CUTS), help="cut a named sequence from recorded clips")
+    ap.add_argument("--take", choices=sorted(TAKES), help="record a presenter-driven page by its take")
     args = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     for name in args.scenes:
@@ -171,6 +306,8 @@ def main():
         montage()
     if args.cut:
         montage(args.cut)
+    if args.take:
+        take(args.take, args.base)
 
 
 if __name__ == "__main__":

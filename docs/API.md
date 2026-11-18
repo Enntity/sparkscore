@@ -99,6 +99,7 @@ values are recorded in every run manifest under
 | `assets` | no | must be absent or `null` | Images are not supported. |
 | `knowledge` | no | nonempty string | A SparkScore extension: text the model reads before the state, such as a policy or a handbook. See [Knowledge](#knowledge). |
 | `knowledge_name` | no | string | A SparkScore extension: a document registered with `PUT /v1/knowledge/NAME` or loaded at startup, used instead of `knowledge`. Unknown names answer 422. |
+| `remember` | no | boolean | A SparkScore extension: `false` for images asked once, such as video frames. The engine reads them without keeping them as an image pack. Default `true`. |
 
 Other top-level fields are ignored.
 

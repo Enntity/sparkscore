@@ -12,6 +12,7 @@ plus the number of prompts the engine had to run.
          it in the request; the others send nothing and get causal attention.
 """
 
+import hashlib
 import http.client
 import json
 import math
@@ -194,19 +195,34 @@ class ScoreBackend:
     """Atlas's `/v1/score`. Knowledge packs: the first request on a pack sends its tokens and Atlas encodes
     them once; later ones send the `pack_id` it answered with (the tokens again if Atlas no longer holds
     it). An Atlas without packs gets the pack as the start of the prefix instead (the same tokens, read as
-    part of the state)."""
+    part of the state).
+
+    Images go the same way: the state block with its images is an image pack (a photo asked many
+    questions is encoded once, and Atlas's pack store keeps it compressed), later requests on the same
+    state and images send only its `pack_id`. An Atlas without image packs gets them in the prefix."""
 
     name = "score"
     packs = True
+    images = True
 
     def __init__(self, base_url, timeout=600.0, attention=None):
         self.http = _Http(base_url, timeout)
         self.attention = attention
-        self.pack_ids = {}  # pack tokens (tuple) -> Atlas pack id
+        self.pack_ids = {}  # pack key (_pack_key) -> Atlas pack id
+        self.image_packs = True  # until Atlas refuses images with a pack
         self.lock = threading.Lock()
 
-    def _post_pack(self, body, pack, report):
-        key = tuple(pack)
+    @staticmethod
+    def _pack_key(pack, images=()):
+        """A fixed-size key for a pack's tokens and images (a pack can be thousands of tokens)."""
+        digest = hashlib.sha256(len(images).to_bytes(8, "little"))
+        digest.update(b"".join(int(t).to_bytes(4, "little") for t in pack))
+        for image in images:
+            digest.update(len(image.data).to_bytes(8, "little") + image.data)
+        return digest.hexdigest()
+
+    def _post_pack(self, body, pack, report, images=()):
+        key = self._pack_key(pack, images)
         with self.lock:
             known = self.pack_ids.get(key)
         if known is not None:
@@ -219,27 +235,40 @@ class ScoreBackend:
                     raise
                 with self.lock:
                     self.pack_ids.pop(key, None)
+        wire = {"images": [image.wire() for image in images]} if images else {}
         try:
-            response = self.http.post("/v1/score", dict(body, pack=pack))
+            response = self.http.post("/v1/score", dict(body, pack=pack, **wire))
         except BackendError as error:
-            # Atlas refuses packs it was not started for, naming the flag (`--score-packs N`).
-            if error.upstream != 422 or not any(s in str(error) for s in ("--score-packs", "packs are off")):
+            # Atlas refuses packs it was not started for, naming the flag (`--score-packs N`), and an
+            # Atlas without image packs refuses images with a pack.
+            refusals = ("--score-packs", "packs are off", "images cannot be combined with pack")
+            if error.upstream != 422 or not any(s in str(error) for s in refusals):
                 raise
+            if images:
+                self.image_packs = False
             report["pack"] = "off"
-            return self.http.post("/v1/score", dict(body, prefix=pack + body["prefix"]))
+            return self.http.post("/v1/score", dict(body, prefix=pack + body["prefix"], **wire))
         if isinstance(response, dict) and isinstance(response.get("pack_id"), str):
             with self.lock:
-                if len(self.pack_ids) >= 64:
+                if len(self.pack_ids) >= 4096:
                     self.pack_ids.pop(next(iter(self.pack_ids)))
                 self.pack_ids[key] = response["pack_id"]
             report["pack"] = response.get("pack", "built")
         return response
 
-    def score(self, prefix, branches, options, pack=None, report=None):
+    def score(self, prefix, branches, options, pack=None, report=None, images=None, remember=True):
         body = {"prefix": prefix, "branches": branches, "options": options}
         if self.attention:
             body["attention"] = self.attention
-        if pack:
+        if images and self.image_packs and remember:
+            # The state block and its images as one image pack, the questions on it.
+            response = self._post_pack(dict(body, prefix=[]), prefix, report if report is not None else {}, images)
+        elif images:
+            # Not to keep (asked once), or an Atlas without image packs: the images in the prefix, one call.
+            if report is not None and remember:
+                report["pack"] = "off"
+            response = self.http.post("/v1/score", dict(body, images=[image.wire() for image in images]))
+        elif pack:
             response = self._post_pack(body, pack, report if report is not None else {})
         else:
             response = self.http.post("/v1/score", body)

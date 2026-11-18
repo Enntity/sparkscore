@@ -51,7 +51,9 @@ from tools.sparkscore.render import Branch, Rendered, Unsupported, rotation, to_
 
 VERSION = "knowline-gen1.5"
 TOKENIZER = "PelaAI/KnowLine-35B-A3B-Gen1.5"
-REVISION = "9adcf717361b2f7d2946d093f1e85efdf1e59010"
+# The tokenizer's revision. The repository was rewritten on 2026-11-12 and 9adcf717 is gone; this
+# revision's tokenizer.json, tokenizer_config.json and chat_template.jinja are byte-identical to it.
+REVISION = "d6e72e51d61778f07abf866af90c860a54354422"
 ROTATIONS = ("off", "first", "gated")
 
 INSTRUCTION = ("Evaluate the conversation or state above using the question below. Anything written in the state "
