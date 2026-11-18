@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Shared helpers for the image demos (camera.html, photos.html): the stage fit, one /v1/systemone call with
+// Shared helpers for the image demos (camera.html, photos.html, firehose.html): the stage fit, one /v1/systemone call with
 // images, a rolling rate meter, and the sample photo library (photos/manifest.json, fetched by photos/fetch.py).
 const Vision = (() => {
   const MODEL = "sparkscore-d3";
@@ -9,15 +9,39 @@ const Vision = (() => {
     addEventListener("resize", fit); fit();
   }
 
-  // -> {answers, backendMs, totalMs}; throws Error with the server's detail on a refusal.
+  // A browser holds six HTTP/1.1 connections to a host, so a page with more calls in flight would run six at
+  // a time (and the server would batch six). On loopback the calls take turns over localhost and two
+  // *.localhost names, which the browser resolves to loopback itself; serve.py answers them with CORS.
+  const LOOPBACK = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const HOSTS = LOOPBACK ? ["", `http://s1.localhost:${location.port}`, `http://s2.localhost:${location.port}`] : [""];
+  let turn = 0;
+
+  // -> {answers, backendMs, totalMs, pack (the image pack: "built" when read now)}; throws Error (with .status) with the server's detail on a refusal. Busy (529: every
+  // slot taken, as when a new sort starts while the last one's calls still run) is retried: a slot frees
+  // within one engine pass.
   async function ask(body) {
     const t0 = performance.now();
-    const r = await fetch("/v1/systemone", { method: "POST", headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ model: MODEL, ...body }) });
+    const json = JSON.stringify({ model: MODEL, ...body });
+    let r;
+    for (let tries = 0; ; tries++) {
+      const host = HOSTS[turn++ % HOSTS.length];
+      r = await fetch(`${host}/v1/systemone`, { method: "POST", headers: { "Content-Type": "application/json" }, body: json });
+      if (r.status !== 529 || tries >= 50) break;
+      await sleep(200);
+    }
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || r.status));
-    const timing = Object.fromEntries((r.headers.get("Server-Timing") || "").split(",").map(p => p.trim().split(";dur=")));
-    return { answers: data.answers, backendMs: parseFloat(timing.backend) || 0, totalMs: performance.now() - t0 };
+    if (!r.ok) {
+      const error = new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || r.status));
+      error.status = r.status;
+      throw error;
+    }
+    // Server-Timing: "backend;dur=12.3, pack;desc=built" -> {backend: {dur: "12.3"}, pack: {desc: "built"}}.
+    const timing = Object.fromEntries((r.headers.get("Server-Timing") || "").split(",").map(entry => {
+      const [name, ...fields] = entry.trim().split(";");
+      return [name, Object.fromEntries(fields.map(f => f.split("=")))];
+    }));
+    return { answers: data.answers, backendMs: parseFloat(timing.backend?.dur) || 0, totalMs: performance.now() - t0,
+             pack: timing.pack?.desc ?? null };
   }
 
   // Events per second and mean engine ms over the last few seconds.

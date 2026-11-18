@@ -150,19 +150,91 @@ class Server(unittest.TestCase):
         self.assertEqual(status, 422, body)
         self.assertIn("images need", str(body["detail"]))
 
-    def test_score_backend_sends_images_to_atlas(self):
-        from tools.sparkscore.backends import ScoreBackend
+    def test_score_backend_sends_images_as_an_image_pack(self):
+        from tools.sparkscore.backends import BackendError, ScoreBackend
 
         backend = ScoreBackend("http://127.0.0.1:1", attention="prefix_bidir")
-        sent = []
-        backend.http.post = lambda path, body: sent.append((path, body)) or {"probs": [[1.0, 3.0]]}
+        sent, replies = [], []
+
+        def post(path, body):
+            sent.append((path, body))
+            reply = replies.pop(0) if replies else {"probs": [[1.0, 3.0]], "pack_id": "00000000000000aa", "pack": "built"}
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        backend.http.post = post
         (img,) = images.parse([url("png", png(64, 64))])
+        wire = [{"data_base64": base64.b64encode(img.data).decode(), "format": "png"}]
         rows, _ = backend.score([1, 2], [[3]], [[100, 101]], images=[img])
         self.assertEqual(rows, [[0.25, 0.75]])
-        path, body = sent[0]
+        path, body = sent[-1]
         self.assertEqual(path, "/v1/score")
-        self.assertEqual(body["images"], [{"data_base64": base64.b64encode(img.data).decode(), "format": "png"}])
+        # The state block is the pack, with its images; the prefix is empty.
+        self.assertEqual((body["pack"], body["prefix"], body["images"]), ([1, 2], [], wire))
         self.assertEqual(body["attention"], "prefix_bidir")
+        # The same state and image again: only the pack id.
+        replies.append({"probs": [[1.0, 1.0]], "pack": "held"})
+        report = {}
+        backend.score([1, 2], [[4]], [[100, 101]], images=[img], report=report)
+        self.assertEqual(sent[-1][1].get("pack_id"), "00000000000000aa")
+        self.assertNotIn("images", sent[-1][1])
+        self.assertEqual(report["pack"], "held")
+        # Another image on the same tokens is another pack.
+        (other,) = images.parse([url("png", png(64, 65))])
+        backend.score([1, 2], [[4]], [[100, 101]], images=[other])
+        self.assertEqual(sent[-1][1]["pack"], [1, 2])
+        # A pack Atlas no longer holds: the tokens and images again.
+        replies.extend([BackendError("gone", upstream=404), {"probs": [[1.0, 1.0]], "pack_id": "00000000000000bb"}])
+        backend.score([1, 2], [[4]], [[100, 101]], images=[img])
+        self.assertEqual((sent[-1][1]["pack"], sent[-1][1]["images"]), ([1, 2], wire))
+        # An Atlas without image packs: the images in the prefix.
+        backend.pack_ids.clear()
+        replies.extend([BackendError("score: images cannot be combined with pack or pack_id", upstream=422),
+                        {"probs": [[1.0, 1.0]]}])
+        report = {}
+        backend.score([1, 2], [[4]], [[100, 101]], images=[img], report=report)
+        self.assertEqual((sent[-1][1]["prefix"], sent[-1][1]["images"]), ([1, 2], wire))
+        self.assertNotIn("pack", sent[-1][1])
+        self.assertEqual(report["pack"], "off")
+        # Remembered: later image requests go straight to the prefix, one call each.
+        before = len(sent)
+        report = {}
+        backend.score([1, 2], [[5]], [[100, 101]], images=[other], report=report)
+        self.assertEqual(len(sent), before + 1)
+        self.assertEqual((sent[-1][1]["prefix"], sent[-1][1]["images"][0]["format"]), ([1, 2], "png"))
+        self.assertEqual(report["pack"], "off")
+
+    def test_pack_ids_are_kept_under_fixed_size_keys(self):
+        from tools.sparkscore.backends import ScoreBackend
+
+        backend = ScoreBackend("http://127.0.0.1:1")
+        backend.http.post = lambda path, body: {"probs": [[1.0, 1.0]], "pack_id": "00000000000000aa", "pack": "built"}
+        (img,) = images.parse([url("png", png(64, 64))])
+        backend.score(list(range(5000)), [[3]], [[100, 101]], images=[img])
+        backend.score([1], [[3]], [[100, 101]], pack=list(range(5000)))
+        self.assertEqual(len(backend.pack_ids), 2)
+        self.assertTrue(all(isinstance(k, str) and len(k) == 64 for k in backend.pack_ids))
+
+    def test_image_pack_status_reaches_server_timing(self):
+        import http.client
+
+        class PackBackend(ImageBackend):
+            def score(self, prefix, branches, options, images=None, report=None, **_):
+                report["pack"] = "held"
+                return super().score(prefix, branches, options, images=images)
+
+        port = self.serve(ImageRenderer(), PackBackend())
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        import json
+        conn.request("POST", "/v1/systemone", json.dumps({**self.BODY, "images": [url("png", png(512, 384))]}).encode(),
+                     {"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+        self.assertEqual(resp.status, 200)
+        self.assertIn("pack;desc=held", resp.getheader("Server-Timing"))
+        self.assertEqual(resp.getheader("X-SparkScore-Pack-Tokens"), str(192 + 1))
 
 
 if __name__ == "__main__":

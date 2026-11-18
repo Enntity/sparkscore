@@ -324,7 +324,7 @@ class Service:
         def score(branches):
             ids, opts = [b.ids for b in branches], [b.option_ids for b in branches]
             if rendered.images:
-                rows, n = self.backend.score(rendered.prefix, ids, opts, images=rendered.images)
+                rows, n = self.backend.score(rendered.prefix, ids, opts, images=rendered.images, report=report)
             elif rendered.pack:
                 rows, n = self.backend.score(rendered.prefix, ids, opts, pack=rendered.pack, report=report)
             else:
@@ -355,7 +355,11 @@ class Service:
         t3 = time.perf_counter()
         ms = lambda a, b: (b - a) * 1000
         timings = {"render": ms(t0, t1), "backend": ms(t1, t2), "answer": ms(t2, t3), "total": ms(t0, t3)}
-        pack = (report.get("pack", "held"), len(rendered.pack)) if rendered.pack else None
+        if rendered.images:
+            # The image pack is the state block itself.
+            pack = (report["pack"], len(rendered.prefix)) if "pack" in report else None
+        else:
+            pack = (report.get("pack", "held"), len(rendered.pack)) if rendered.pack else None
         return response, timings, passes, len(rendered.prefix), pack
 
     def models(self):

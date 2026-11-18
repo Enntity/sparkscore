@@ -141,7 +141,9 @@ addEventListener("drop", async e => {
 });
 
 Vision.fitStage();
-Vision.library().then(show).catch(e => { document.getElementById("count").textContent = e.message; });
+// The first ?n= photos of the library (default 120; firehose.html pours in the rest).
+const N = +(new URLSearchParams(location.search).get("n") || 120);
+Vision.library().then(list => show(list.slice(0, N))).catch(e => { document.getElementById("count").textContent = e.message; });
 </script>
 </body>
 </html>
