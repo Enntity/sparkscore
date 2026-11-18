@@ -3,16 +3,17 @@
 requests addressed to another host, takes JSON bodies only, and never serves demo/out/."""
 
 import http.client
-import sys
+import importlib.util
 import threading
 import unittest
 from functools import partial
 from pathlib import Path
 
 DEMO = Path(__file__).resolve().parents[1] / "demo"
-sys.path.insert(0, str(DEMO))
-
-import serve  # noqa: E402
+# By path, under its own name: install/serve.py is another `serve` (test_install_serve.py).
+_spec = importlib.util.spec_from_file_location("demo_serve", DEMO / "serve.py")
+serve = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(serve)
 
 
 class Proxy(unittest.TestCase):

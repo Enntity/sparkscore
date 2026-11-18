@@ -3,14 +3,15 @@
 library settings (the pack store in device memory and its NVMe tier)."""
 
 import argparse
+import importlib.util
 import shlex
-import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "install"))
-
-import serve  # noqa: E402
+# By path, under its own name: demo/serve.py is another `serve` (test_demo_serve.py).
+_spec = importlib.util.spec_from_file_location("install_serve", Path(__file__).resolve().parents[1] / "install" / "serve.py")
+serve = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(serve)
 
 
 def args(**kw):
