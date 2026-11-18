@@ -45,11 +45,15 @@ Four pages that score images with d3-ultra on one DGX Spark through SparkScore's
 ## Run
 
 On the Spark, SparkScore with the photo library on: a 20 GiB pack store in device memory (about 400
-photos), 300 GiB of NVMe behind it, and 24 packs held. `install/atlas-source.json` pins the Atlas
-build with images in `/v1/score` and the pack store; without a published image for that pin,
-`./start.sh` builds it from source (20-40 minutes the first time):
+photos) and 300 GiB of NVMe behind it. `install/atlas-source.json` pins the Atlas build with images
+in `/v1/score` and the pack store; without a published image for that pin, `./start.sh` builds it
+from source (20-40 minutes the first time):
 
-    STORE_GB=20 STORE_DIR=~/sparkscore-store STORE_DISK_GB=300 PACKS=24 ./start.sh
+    STORE_GB=20 STORE_DIR=~/sparkscore-store STORE_DISK_GB=300 ./start.sh
+
+Keep the default 8 packs held: each held pack takes one of the 32 sequences a pass can use, and with
+the store a photo comes back in about 5 ms anyway (PACKS=24 left 8 sequences a pass and re-sorted at
+28 photos/s instead of 35).
 
 On the machine with the browser:
 
