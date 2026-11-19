@@ -3,8 +3,8 @@
   "note": "The score path and dense 27B prefill kernels (merged upstream as Atlas-Inf/atlas#331), knowledge packs (proposed upstream as Atlas-Inf/atlas#332), and on top of them image packs, the FP8 pack store with its NVMe tier and read-ahead, and the image prefill fusions (Enntity/atlas sparkscore/score-images only for now). Once these land upstream: install/repin.sh <merge commit>.",
   "repository": "https://github.com/Enntity/atlas.git",
   "branch": "sparkscore/score-images",
-  "commit": "68baafe3c86e22602b600b88f069d32a671f3804",
-  "tree": "df0808efdd319fcc7d571bc8d60a7616d9326fa9",
+  "commit": "c41be77f3bdac311c36406b4d5940fe5eae2eef1",
+  "tree": "e221596b68eb5089d31801dfcaddc9de96a6cdf5",
   "upstream_pr": "https://github.com/Atlas-Inf/atlas/pull/332",
   "target": {
     "hw": "gb10",
