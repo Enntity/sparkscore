@@ -265,7 +265,10 @@ The details, the cost model and the roofline are in
 
 - **Hardware.** One DGX Spark (GB10) only. The kernels are written for its
   tensor cores and memory system.
-- **Input.** Text only. d3-ultra's image and box questions are not served.
+- **Input.** Text and images: up to 8 images per request as base64 data URLs
+  in d3-ultra's own `images` field, read by every question (see
+  [Images](#images)). TypeSafe's `assets` field, `box` and track questions
+  are not served; a video is read as frames, each an image (`demo/watch.html`).
 - **Length.** A question's prompt may be up to 32,768 tokens, a request up to
   65,536 tokens and 256 questions. Longer requests are refused, not
   truncated. Atlas splits a request with several questions into more than one
