@@ -141,11 +141,6 @@ The demo has five scenes:
 
 All their data is fictional, and all timings are live.
 
-Four image demos read photos and video through `images` in `/v1/systemone`: a camera programmed by a
-sentence, a photo library sorted by a question, a photo firehose that re-sorts hundreds of photos
-live by new questions, and a film read live, ten questions a frame. See
-[demo/IMAGES.md](demo/IMAGES.md).
-
 <p align="center"><img src="docs/assets/demo-claims.gif" alt="Insurance claim files scored at full speed: twelve typed decisions per file in one engine pass, about half a second per file" width="80%"></p>
 
 ## Knowledge packs
@@ -187,6 +182,58 @@ Details:
 - **API:** `knowledge`, `knowledge_name` and `/v1/knowledge` are in [docs/API.md](docs/API.md#knowledge).
 - **Packs held:** Atlas holds up to 8 packs by default (`PACKS` changes it) and evicts the least recently used
   first. The harness re-sends an evicted pack by itself.
+
+## Images
+
+d3-ultra reads images. Send them as base64 data URLs in `images`, the way d3-ultra's own server takes them, and
+every question in the request reads the same encoding:
+
+```bash
+curl -s http://127.0.0.1:8015/v1/systemone -H 'content-type: application/json' -d "{
+  \"model\": \"sparkscore-d3\", \"state\": \"\",
+  \"images\": [\"data:image/jpeg;base64,$(base64 < photo.jpg | tr -d '\n')\"],
+  \"questions\": {
+    \"dog\": {\"type\": \"noul\", \"instructions\": \"Is there a dog in the photo?\"},
+    \"setting\": {\"type\": \"choice\", \"instructions\": \"Where was this taken?\",
+                \"criteria\": {\"indoors\": null, \"street\": null, \"nature\": null}}}
+}"
+```
+
+A photo is encoded once, as an **image pack**, and a new question about it reads that encoding. With a pack
+store, every photo's encoding is kept, so a whole library re-sorts by any new question at full speed:
+
+```bash
+STORE_GB=20 STORE_DIR=~/sparkscore-store STORE_DISK_GB=300 ./start.sh
+```
+
+That keeps 20 GiB in device memory (about 400 photos at 640x480) and 300 GiB on NVMe behind it. Packs on NVMe are
+read ahead of their passes.
+
+| One DGX Spark, 120 COCO photos (~640x480), one question each, 16 in flight | photos/s |
+|---|---:|
+| First question (every photo encoded) | 5.3–5.6 |
+| A new question, photos in device memory | 33–36 |
+| A new question, every photo on NVMe (read ahead) | 31.5–34 |
+| Video, ten questions a frame (`"remember": false`: frames are read, not kept) | 3.0–3.7 frames/s |
+
+Answers are bit-identical whether a photo's encoding comes from memory or from disk. Receipts are in
+[results/2026-11-18-image-scoring](results/2026-11-18-image-scoring/README.md).
+
+Four image demos ([demo/IMAGES.md](demo/IMAGES.md)):
+- a camera programmed by a sentence;
+- a photo library sorted by a question;
+- a photo firehose: photos stream in at full speed and hundreds re-sort live by new questions, the top
+  matches shown large;
+- a film read live, ten questions a frame (emotion, action, setting, tension and five flags).
+
+<p align="center"><img src="docs/assets/demo-firehose.gif" alt="Photo firehose: 125 photos in, then a new question re-sorts them from memory in 4.4 s, the top 9 food photos shown large at 96-97%" width="80%"></p>
+
+<p align="center"><img src="docs/assets/demo-watch.gif" alt="A film read live on one DGX Spark: emotion and action distributions, setting, tension and flags at about 3 frames a second" width="80%"></p>
+
+Details:
+- **API:** `images` and `remember` are in [docs/API.md](docs/API.md#images).
+- **Credits:** the photos are COCO val2017 under CC BY / CC BY-SA, the film is Tears of Steel (Blender
+  Foundation, CC BY 3.0); the fetch scripts in `demo/` download them.
 
 ## How it works
 
@@ -239,12 +286,13 @@ The details, the cost model and the roofline are in
 
 ## The engine
 
-The score path and kernels are proposed upstream as an Atlas pull request
-([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). Knowledge packs and their attention kernel
-are not part of that pull request yet. Until it merges, SparkScore builds Atlas from the
-[`Enntity/atlas`](https://github.com/Enntity/atlas) branch named in
-[install/atlas-source.json](install/atlas-source.json). Once the score path and
-knowledge packs are both upstream, `install/repin.sh` moves the pin to Atlas-Inf, and nothing else changes.
+The score path and its kernels are upstream in Atlas
+([Atlas-Inf/atlas#331](https://github.com/Atlas-Inf/atlas/pull/331)). Knowledge packs
+([Atlas-Inf/atlas#332](https://github.com/Atlas-Inf/atlas/pull/332)) and images with the pack store
+([Atlas-Inf/atlas#397](https://github.com/Atlas-Inf/atlas/pull/397)) are proposed upstream. Until they merge,
+SparkScore builds Atlas from the [`Enntity/atlas`](https://github.com/Enntity/atlas) branch named in
+[install/atlas-source.json](install/atlas-source.json). Once they are upstream, `install/repin.sh` moves the pin to
+Atlas-Inf, and nothing else changes.
 
 ## Repository
 

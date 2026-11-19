@@ -31,11 +31,11 @@ TypeSafe's hosted service. The differences that the code documents:
 | Area | SparkScore |
 |---|---|
 | `GET /v1/limits` | An extension. It is not part of TypeSafe's API. |
-| Images | `assets` and `box` questions are refused with 422: d3-ultra is served text only. |
+| Images | `images`, d3-ultra's own field: base64 data URLs every question reads (see [Images](#images)). TypeSafe's `assets` and `box` questions are refused with 422. |
 | d3-ultra's own rules | A `choice` with an empty option key, and a `score` whose level texts are empty or repeated, are refused with 422. |
 | `zstd` bodies | Accepted only when the harness runs on Python 3.14 or later. The container's Python is older, so it answers 415; use `gzip`. |
 | `model` in the response | Always `sparkscore-d3`, even when the request names an alias. |
-| Extra headers | `Server-Timing`, `X-SparkScore-Passes` and `X-SparkScore-Prefix-Tokens`; with `knowledge` on packs, also `X-SparkScore-Pack-Tokens` and a `pack` entry in `Server-Timing`. |
+| Extra headers | `Server-Timing`, `X-SparkScore-Passes` and `X-SparkScore-Prefix-Tokens`; with `knowledge` or `images` on packs, also `X-SparkScore-Pack-Tokens` and a `pack` entry in `Server-Timing`. |
 | `knowledge`, `knowledge_name`, `/v1/knowledge` | Extensions. They are not part of TypeSafe's API. |
 
 ## Routes
@@ -96,7 +96,8 @@ values are recorded in every run manifest under
 | `model` | yes | string | `sparkscore-d3`, `sparkscore-latest` or `jev-latest`. |
 | `state` | yes | string, object or array | The data the questions are about. A string is shown verbatim, anything else as JSON. An empty string is shown as `(empty)`. |
 | `questions` | yes | object, at least 1 entry | Question name to question. Answers come back under the same names, in the same order. |
-| `assets` | no | must be absent or `null` | Images are not supported. |
+| `assets` | no | must be absent or `null` | TypeSafe's image field is refused: send `images`. |
+| `images` | no | array of strings | d3-ultra's own field: up to 8 images as `data:image/png;base64,…` (or `jpeg`, `webp`) URLs, at most 8 MB each. Every question reads them. See [Images](#images). |
 | `knowledge` | no | nonempty string | A SparkScore extension: text the model reads before the state, such as a policy or a handbook. See [Knowledge](#knowledge). |
 | `knowledge_name` | no | string | A SparkScore extension: a document registered with `PUT /v1/knowledge/NAME` or loaded at startup, used instead of `knowledge`. Unknown names answer 422. |
 | `remember` | no | boolean | A SparkScore extension: `false` for images asked once, such as video frames. The engine reads them without keeping them as an image pack. Default `true`. |
@@ -179,6 +180,23 @@ with 422.
 
 `X-SparkScore-Pack-Tokens` and the `pack` entry of `Server-Timing` (`built`, `held` or `off`) say how a request
 used its pack.
+
+### Images
+
+`images` takes up to 8 base64 data URLs (PNG, JPEG or WebP, at most 8 MB each), as d3-ultra's own server
+does. Each image is resized the way d3-ultra's processor does (65,536 to 1,638,400 pixels) and becomes one
+image pad per 32 x 32 pixels of the state block. Every question in the request reads the same encoding.
+
+```json
+{"model": "sparkscore-d3", "state": "", "images": ["data:image/jpeg;base64,/9j/4AAQ…"],
+ "questions": {"dog": {"type": "noul", "instructions": "Is there a dog in the photo?"}}}
+```
+
+The state block and its images are held by the engine as an **image pack**: a later request with the same state
+and images, asked new questions, reads the encoding instead of recomputing it (`pack;desc=held` in
+`Server-Timing`). With a pack store (`STORE_GB`, see the README), every photo's encoding is kept, in device memory
+and then on NVMe. Send `"remember": false` for images asked only once, such as video frames: they are read without
+being kept.
 
 ### Response
 
@@ -289,6 +307,9 @@ Every 200 response carries these headers:
 | `X-SparkScore-Passes` | `1` when a question needed the model, `0` when none did |
 | `X-SparkScore-Prefix-Tokens` | Tokens in the shared state block |
 
+A request on a pack (knowledge or images) also carries `X-SparkScore-Pack-Tokens` and a `pack` entry in
+`Server-Timing` (see [Knowledge](#knowledge)).
+
 The timings in `Server-Timing`:
 
 - **`render`:** the prompt template and tokenization.
@@ -364,8 +385,9 @@ The template reproduces vllm-sr/d3-ultra's own prompts, token for token, at
 revision `ccdcfa611649a59e095e0b5e1732a15cedafadd6`. `tests/test_d3.py`
 checks it against d3's code.
 
-- **Input:** text only. `assets`, `box` questions, videos and track questions
-  are not served.
+- **Input:** text and images (`images`). `assets`, `box` questions, videos
+  and track questions are not served; a video is read as frames, each an
+  image (`demo/watch.html`).
 - **Options:** a `choice` takes 1 to 255 options. They are shown under the
   codes `A`, `B`, …, then two-letter codes, each a single token of d3's
   tokenizer. A `noul` is `A` = false, `B` = true. A `score` takes 1 to 10
