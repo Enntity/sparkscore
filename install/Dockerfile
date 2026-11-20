@@ -25,7 +25,11 @@ COPY engine/ /build/
 ENV ATLAS_TARGET_HW=gb10 ATLAS_TARGET_MODEL=qwen3.8-27b ATLAS_TARGET_QUANT=nvfp4
 ARG BUILD_JOBS=8
 RUN --mount=type=cache,target=/build/target,id=atlas-cargo-target-sparkscore,sharing=shared \
-    cargo build --locked --release -j "$BUILD_JOBS" -p spark-server && \
+    # jpeg-turbo: libjpeg-turbo is the decoder the image-scoring receipts were
+    # measured with (results/2026-11-18-image-scoring). It is opt-in in Atlas
+    # (the CI runners can't build the C library); this build can.
+    cargo build --locked --release -j "$BUILD_JOBS" -p spark-server \
+      --features spark-model/jpeg-turbo && \
     install -D target/release/spark /build/dist/spark
 # License notices of every third-party crate compiled into the binary.
 COPY install/rust-notices.py /tmp/rust-notices.py
