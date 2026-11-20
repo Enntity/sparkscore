@@ -141,6 +141,11 @@ The demo has five scenes:
 
 All their data is fictional, and all timings are live.
 
+The same `serve.py` also serves [demo/hn.html](demo/hn.html): the last 24 hours of Hacker News
+(live titles and domains from HN's public search API, news.ycombinator.com), read by four typed
+judgements per post, plus your own yes/no question of every post and a reading profile as a
+knowledge pack. Open http://127.0.0.1:8780/hn.html.
+
 <p align="center"><img src="docs/assets/demo-claims.gif" alt="Insurance claim files scored at full speed: twelve typed decisions per file in one engine pass, about half a second per file" width="80%"></p>
 
 ## Knowledge packs

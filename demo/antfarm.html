@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- The ant farm: a village whose every inhabitant decides what to do next with a live
+     SparkScore call. Serve with demo/serve.py and open /antfarm.html
+     (?n=villagers&k=villagers per request&c=requests in flight&actions=7|9|12). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SparkScore · the ant farm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<link rel="stylesheet" href="style.css">
+<style>
+#map { position: absolute; left: 40px; top: 104px; width: 1340px; height: 936px; border-radius: 22px;
+  border: 1px solid var(--line); background: #060914; cursor: crosshair; }
+.side { position: absolute; left: 1400px; top: 104px; width: 480px; height: 936px; display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 13px 18px; backdrop-filter: blur(14px); }
+.card h3 { margin: 0 0 10px; font: 600 13px var(--mono); letter-spacing: 1.6px; text-transform: uppercase; color: var(--dim); }
+.clock { display: flex; align-items: baseline; justify-content: space-between; }
+.clock .t { font: 700 46px var(--head); letter-spacing: -1px; }
+.clock .p { font: 500 20px var(--head); color: var(--dim); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+button.b { font: 500 14px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 13px; cursor: pointer; }
+button.b:hover { border-color: var(--cyan); }
+button.b.on { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 14px rgba(62, 232, 255, 0.25); }
+button.b.hot { border-color: rgba(255, 95, 210, 0.5); }
+#crier { width: 100%; font: 500 17px var(--body); color: var(--text); background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line); border-radius: 12px; padding: 11px 13px; outline: none; }
+#crier:focus { border-color: var(--cyan); }
+#news { margin-top: 10px; font: 500 16px var(--body); color: var(--amber); min-height: 20px; }
+#news.quiet { color: var(--faint); }
+.stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.stat .v { font: 700 34px var(--head); letter-spacing: -0.5px; color: var(--cyan); font-variant-numeric: tabular-nums; }
+.stat .l { font: 400 12px var(--mono); color: var(--dim); margin-top: 2px; }
+.bars { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 16px; }
+.bar { display: grid; grid-template-columns: 62px 1fr 34px; align-items: center; gap: 8px; font: 500 13px var(--mono); color: var(--dim); }
+.bar .track { height: 9px; border-radius: 5px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.bar .fill { height: 100%; border-radius: 5px; transition: width 0.5s ease; }
+.bar .n { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.bar.pick { color: var(--text); }
+#who { flex: 1; min-height: 0; overflow: hidden; }
+#who .nm { font: 700 22px var(--head); }
+#who .ds { font: 400 14px/1.35 var(--body); color: var(--dim); margin: 3px 0 8px; }
+#who .ds b { color: var(--text); font-weight: 500; }
+#who .did { font: 500 14px var(--mono); margin-top: 8px; }
+.sub { font: 400 12px var(--mono); color: var(--faint); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="bg"><div class="grid"></div><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ee8ff"/><stop offset="1" stop-color="#b07bff"/></linearGradient></defs>
+        <path d="M20 2 L24 16 L38 20 L24 24 L20 38 L16 24 L2 20 L16 16 Z" fill="url(#lg)"/>
+      </svg>
+      <span class="name">SparkScore</span>
+      <span class="sep"></span>
+      <span class="scene-title">The ant farm: every villager is a live decision</span>
+    </div>
+    <div class="chips">
+      <span class="chip" id="cN"></span>
+      <span class="chip">d3-ultra 27B · 1× DGX Spark</span>
+      <span class="chip live" id="live"><i></i>LIVE</span>
+    </div>
+  </header>
+
+  <canvas id="map" width="1340" height="936"></canvas>
+
+  <aside class="side">
+    <div class="card">
+      <div class="clock"><span class="t" id="time">06:00</span><span class="p" id="phase">dawn · clear</span></div>
+      <div class="row" id="times"></div>
+      <div class="row" id="weathers"></div>
+    </div>
+    <div class="card">
+      <h3>Town crier</h3>
+      <input id="crier" placeholder="Announce anything, then press Enter" autocomplete="off" spellcheck="false">
+      <div class="row" id="events"></div>
+      <div id="news" class="quiet">Nothing unusual is happening.</div>
+    </div>
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><div class="v" id="sRate">0</div><div class="l">decisions / s</div></div>
+        <div class="stat"><div class="v" id="sTotal">0</div><div class="l">decisions made</div></div>
+        <div class="stat"><div class="v" id="sMs">0</div><div class="l" id="sMsL">ms per decision</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>What the village is doing</h3>
+      <div class="bars" id="doing"></div>
+    </div>
+    <div class="card" id="who">
+      <h3>One villager's last decision · model probabilities</h3>
+      <div id="whoBody"><div class="ds">Click anyone on the map.</div></div>
+    </div>
+  </aside>
+  <div class="note">Fictional village · every move is a model probability, sampled · rates are live</div>
+</div>
+
+<script>
+"use strict";
+const Q = new URLSearchParams(location.search);
+const N = +(Q.get("n") || 160), K = +(Q.get("k") || 16), CONC = +(Q.get("c") || 1);
+const SIM_MIN_PER_SEC = +(Q.get("speed") || 5);       // simulated minutes per real second
+const stage = document.getElementById("stage");
+const fit = () => stage.style.setProperty("--s", Math.min(innerWidth / 1920, innerHeight / 1080));
+addEventListener("resize", fit); fit();
+const $ = (id) => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
+const clamp = (v) => Math.max(0, Math.min(100, v));
+
+// ---------------------------------------------------------------- the village
+const PLACES = {
+  square:  { x: 670, y: 470, r: 70, label: "Square" },
+  tavern:  { x: 430, y: 330, r: 48, label: "Tavern" },
+  market:  { x: 905, y: 330, r: 56, label: "Market" },
+  chapel:  { x: 670, y: 170, r: 44, label: "Chapel" },
+  farm:    { x: 215, y: 735, r: 95, label: "Farm" },
+  mill:    { x: 1130, y: 690, r: 50, label: "Mill" },
+  forge:   { x: 960, y: 520, r: 38, label: "Forge" },
+  bakery:  { x: 800, y: 640, r: 38, label: "Bakery" },
+  school:  { x: 440, y: 590, r: 40, label: "School" },
+  lake:    { x: 1165, y: 185, r: 105, label: "Lake" },
+  forest:  { x: 125, y: 150, r: 110, label: "Forest" },
+  gate:    { x: 670, y: 860, r: 36, label: "Gate" },
+};
+const ACTIONS = {
+  work:  { say: "go to their job", color: "#ffc23d", verb: "working" },
+  eat:   { say: "have a meal at the tavern", color: "#ff9d5c", verb: "eating", at: "tavern" },
+  sleep: { say: "go home to bed", color: "#6f7cff", verb: "asleep" },
+  shop:  { say: "buy things at the market", color: "#3ee8ff", verb: "shopping", at: "market" },
+  chat:  { say: "meet friends in the square", color: "#3dffa8", verb: "chatting", at: "square" },
+  rest:  { say: "relax by the lake", color: "#7fd4ff", verb: "resting", at: "lake" },
+  pray:  { say: "go to the chapel", color: "#a77bff", verb: "praying", at: "chapel" },
+  hide:  { say: "lock themselves in at home", color: "#8d97bf", verb: "hiding" },
+  look:  { say: "go and watch what is happening", color: "#ffffff", verb: "watching" },
+  help:  { say: "go and help with what is happening", color: "#ff3d6e", verb: "helping" },
+  flee:  { say: "run away to the forest", color: "#ff5fd2", verb: "fleeing", at: "forest" },
+  party: { say: "celebrate in the square", color: "#ffe45c", verb: "celebrating", at: "square" },
+};
+// Each action offered costs about 7 tokens per villager, so fewer actions means more decisions a second.
+const ACTION_SETS = { 7: ["work", "eat", "sleep", "chat", "hide", "help", "flee"], 9: ["work", "eat", "sleep", "chat", "hide", "look", "help", "flee", "party"], 12: Object.keys(ACTIONS) };
+const KEYS = ACTION_SETS[Q.get("actions")] || ACTION_SETS[9];
+const CRITERIA = Object.fromEntries(KEYS.map((k) => [k, null]));
+const ROLES = [
+  ["farmer", "farm", 5], ["miller", "mill", 2], ["blacksmith", "forge", 2], ["baker", "bakery", 2], ["fisher", "lake", 2],
+  ["merchant", "market", 3], ["guard", "gate", 2], ["priest", "chapel", 1], ["innkeeper", "tavern", 1], ["bard", "tavern", 1],
+  ["schoolchild", "school", 3], ["teacher", "school", 1], ["elder", null, 2],
+];
+const TRAITS = ["brave", "timid", "greedy", "kind", "lazy", "curious", "devout", "cheerful", "grumpy", "hard-working", "cautious", "reckless", "shy", "sociable"];
+const NAMES = "Mara Tomas Elin Bram Odette Garrick Isolde Wren Alaric Hilda Perrin Sunniva Cedric Maud Jorah Tilda Osric Linnea Hugh Agnes Rolf Petra Emeric Ysolt Dunstan Greta Faron Lisbet Anselm Brida Corwin Edda Lukas Marga Niall Orla Piers Runa Stellan Thea Ulric Vesna Wilmar Yara Zane Alba Beric Clara Dain Esme Finn Gwen Harl Ines Joss Kira Leif Mina Nico Olwen Pell Quill Rhea Sten Tove".split(" ");
+
+const cvs = $("map"), ctx = cvs.getContext("2d");
+$("cN").textContent = `${N} villagers`;
+const W = cvs.width, H = cvs.height;
+const homes = [];
+for (const [x0, y0, cols, rows] of [[90, 400, 4, 3], [330, 780, 9, 2], [1140, 400, 3, 3], [860, 790, 4, 2]])
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) homes.push({ x: x0 + c * 62 + rnd(-8, 8), y: y0 + r * 58 + rnd(-6, 6) });
+
+const world = { minute: 6 * 60, day: 0, weather: "clear", news: "", place: null, newsUntil: 0, paused: false };
+const WEATHERS = { clear: "clear skies", rain: "steady rain", storm: "a violent thunderstorm", snow: "heavy snow", heat: "a scorching heatwave" };
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const phaseOf = (m) => { const h = m / 60; return h < 5 ? "night" : h < 7 ? "dawn" : h < 12 ? "morning" : h < 14 ? "midday" : h < 18 ? "afternoon" : h < 21 ? "evening" : "night"; };
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.floor(m % 60)).padStart(2, "0")}`;
+
+const villagers = [];
+const rolePool = ROLES.flatMap(([name, place, weight]) => Array(weight).fill([name, place]));
+for (let i = 0; i < N; i++) {
+  const [role, workplace] = rolePool[i % rolePool.length];
+  const home = homes[i % homes.length];
+  const t1 = pick(TRAITS); let t2 = pick(TRAITS); while (t2 === t1) t2 = pick(TRAITS);
+  villagers.push({
+    id: "v" + i, name: NAMES[i % NAMES.length], role, workplace, home, traits: [t1, t2],
+    age: role === "schoolchild" ? Math.floor(rnd(7, 14)) : role === "elder" ? Math.floor(rnd(66, 88)) : Math.floor(rnd(18, 62)),
+    x: home.x + rnd(-6, 6), y: home.y + rnd(-6, 6), tx: home.x, ty: home.y, ox: rnd(-1, 1), oy: rnd(-1, 1),
+    hunger: rnd(15, 60), energy: rnd(60, 95), coins: Math.floor(rnd(0, 14)), lonely: rnd(10, 60), purse: 0,
+    action: "sleep", arrived: true, paid: true, decidedAt: -1e9, flash: 0, dirty: true, probs: null, asked: "", inflight: false,
+    speed: rnd(46, 70),
+  });
+}
+
+function destination(v, action) {
+  const a = ACTIONS[action];
+  if (a.at) return PLACES[a.at];
+  if (action === "sleep" || action === "hide") return { ...v.home, r: 7 };
+  if (action === "work") return v.workplace ? PLACES[v.workplace] : { ...v.home, r: 16 };
+  return PLACES[world.place || "square"];            // look, help
+}
+function placeName(v, action) {
+  const a = ACTIONS[action];
+  if (a.at) return a.at === "forest" ? "in the forest" : a.at === "lake" ? "by the lake" : `at the ${a.at}`;
+  if (action === "sleep" || action === "hide") return "at home";
+  if (action === "work") return v.workplace ? (v.workplace === "lake" ? "on the lake" : `at the ${v.workplace}`) : "in the garden at home";
+  return world.place ? `at the ${world.place}` : "in the square";
+}
+function setAction(v, action) {
+  if (v.action !== action) { v.arrived = false; v.paid = false; }
+  v.action = action;
+  const d = destination(v, action);
+  const ang = rnd(0, Math.PI * 2), rad = Math.sqrt(Math.random()) * d.r * 0.82;
+  v.tx = d.x + Math.cos(ang) * rad; v.ty = d.y + Math.sin(ang) * rad;
+}
+
+// ------------------------------------------------------------- what the model reads
+const words = (v) => {
+  const hunger = v.hunger < 25 ? "well fed" : v.hunger < 50 ? "a little hungry" : v.hunger < 75 ? "hungry" : "starving";
+  const energy = v.energy > 75 ? "well rested" : v.energy > 50 ? "fine" : v.energy > 25 ? "tired" : "exhausted";
+  const lonely = v.lonely < 35 ? "" : v.lonely < 70 ? ", wants company" : ", lonely";
+  const coins = v.coins <= 0 ? "no money" : v.coins === 1 ? "1 coin" : `${v.coins} coins`;
+  return { hunger, energy, lonely, coins };
+};
+function describe(v) {
+  const w = words(v);
+  const now = `${v.arrived ? "" : "going to be "}${ACTIONS[v.action].verb} ${placeName(v, v.action)}`;
+  const cap = (t) => t[0].toUpperCase() + t.slice(1);
+  return `${v.name}: ${v.age}, ${v.role}, ${v.traits[0]}, ${v.traits[1]}. ${cap(w.hunger)}, ${w.energy}${w.lonely}, ${w.coins}. Now: ${now}.`;
+}
+function stateText(roster) {
+  const m = world.minute;
+  const news = world.news ? `The town crier is shouting: "${world.news}"` : "Nothing unusual is happening.";
+  return `Emberfall is a small medieval village.\nTime: ${DAYS[world.day % 7]} ${hhmm(m)}, ${phaseOf(m)}. Weather: ${WEATHERS[world.weather]}.\n${news}\n\n` +
+    "Each question names one villager. Choose what that villager does next, given who they are, how they feel, the time, the weather and what is happening.\n" +
+    "The actions:\n" + KEYS.map((k) => `${k}: ${ACTIONS[k].say}`).join("\n") + (roster ? "\n\nVillagers:\n" + roster.join("\n") : "");
+}
+
+// ----------------------------------------------------------------- the scoring loop
+const live = $("live");
+let total = 0, inflight = 0, stamps = [], lastMs = 0, lastK = 1, epoch = 0;
+async function score(body) {
+  const t0 = performance.now();
+  const r = await fetch("/v1/systemone", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  const j = await r.json();
+  return { j, ms: performance.now() - t0 };
+}
+function nextBatch() {
+  const free = villagers.filter((v) => !v.inflight);
+  // News spreads from the square outward; otherwise whoever has waited longest goes first.
+  const dirty = free.filter((v) => v.dirty).sort((a, b) => Math.hypot(a.x - 670, a.y - 470) - Math.hypot(b.x - 670, b.y - 470));
+  const rest = free.filter((v) => !v.dirty).sort((a, b) => a.decidedAt - b.decidedAt);
+  const names = new Set(), batch = [];              // a question names its villager, so names are unique within a pass
+  for (const v of dirty.concat(rest)) { if (names.has(v.name)) continue; names.add(v.name); batch.push(v); if (batch.length === K) break; }
+  return batch;
+}
+async function pump() {
+  if (inflight >= CONC || world.paused) return;
+  const batch = nextBatch();
+  if (!batch.length) return;
+  inflight++;
+  const mine = epoch, questions = {};
+  for (const v of batch) { v.inflight = true; v.asked = describe(v); questions[v.id] = { type: "choice", instructions: v.name, criteria: CRITERIA }; }
+  try {
+    const { j, ms } = await score({ model: "sparkscore-d3", state: stateText(batch.map((v) => v.asked)), questions });
+    lastMs = ms; lastK = batch.length; live.classList.remove("down");
+    // The pass answers everyone at once; show the answers one by one over the time the next pass takes.
+    batch.forEach((v, i) => setTimeout(() => {
+      const a = j.answers[v.id]; v.inflight = false; if (!a) return;
+      v.probs = a.probabilities;
+      let roll = Math.random(), choice = a.choice;
+      for (const k of KEYS) { roll -= a.probabilities[k] || 0; if (roll <= 0) { choice = k; break; } }
+      setAction(v, choice);
+      v.decidedAt = performance.now(); v.flash = 1; if (mine === epoch) v.dirty = false;
+      total++; stamps.push(v.decidedAt);
+    }, i * ms / batch.length));
+  } catch (error) {
+    console.warn(error); live.classList.add("down"); await new Promise((r) => setTimeout(r, 1000));
+    for (const v of batch) v.inflight = false;
+  } finally {
+    inflight--;
+  }
+}
+setInterval(() => { for (let i = 0; i < CONC; i++) pump(); }, 25);
+
+async function announce(text, place) {
+  world.news = text; world.place = place || null; epoch++;
+  for (const v of villagers) v.dirty = true;
+  $("news").textContent = text ? `“${text}”` : "Nothing unusual is happening."; $("news").classList.toggle("quiet", !text);
+  if (text && !place) {                       // ask the model where the news is happening
+    try {
+      const criteria = Object.fromEntries(Object.keys(PLACES).map((k) => [k, null])); criteria.nowhere = "nowhere in particular, or everywhere";
+      const { j } = await score({ model: "sparkscore-d3", state: stateText(), questions: { where: { type: "choice", instructions: "Where in the village is the town crier's news happening?", criteria } } });
+      const where = j.answers.where.choice;
+      if (world.news === text && PLACES[where]) { world.place = where; for (const v of villagers) if (v.action === "look" || v.action === "help") setAction(v, v.action); }
+    } catch (error) { console.warn(error); }
+  }
+}
+function changed() { epoch++; for (const v of villagers) v.dirty = true; }
+
+// ------------------------------------------------------------------------ controls
+const mk = (host, label, fn, cls = "") => { const b = document.createElement("button"); b.className = "b " + cls; b.textContent = label; b.onclick = () => fn(b); $(host).appendChild(b); return b; };
+for (const [label, minute] of [["Dawn", 360], ["Noon", 720], ["Dusk", 1140], ["Midnight", 0]]) mk("times", label, () => { world.minute = minute; changed(); });
+const pauseB = mk("times", "Hold clock", (b) => { world.clockHeld = !world.clockHeld; b.classList.toggle("on", world.clockHeld); });
+const wB = {};
+for (const w of Object.keys(WEATHERS)) wB[w] = mk("weathers", w, () => { world.weather = w; for (const k in wB) wB[k].classList.toggle("on", k === w); changed(); }, w === "clear" ? "on" : "");
+for (const [label, text, place] of [
+  ["Fire", "Fire at the mill! Bring buckets!", "mill"], ["Wolves", "Wolves have been seen at the farm!", "farm"],
+  ["Festival", "The harvest festival begins in the square: music, dancing and free cider!", "square"],
+  ["Free bread", "The baker is giving away free bread at the bakery!", "bakery"],
+  ["Dragon", "A dragon is circling over the lake!", "lake"], ["Raiders", "Raiders at the gate! The guard needs every able hand!", "gate"],
+]) mk("events", label, () => announce(text, place), "hot");
+mk("events", "All clear", () => announce("", null));
+$("crier").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.value.trim()) { announce(e.target.value.trim(), null); e.target.select(); } });
+
+let selected = null, userPicked = false;
+cvs.addEventListener("click", (e) => {
+  const b = cvs.getBoundingClientRect(), x = (e.clientX - b.left) * W / b.width, y = (e.clientY - b.top) * H / b.height;
+  let best = null, bd = 26;
+  for (const v of villagers) { const d = Math.hypot(v.x - x, v.y - y); if (d < bd) { bd = d; best = v; } }
+  if (best) { selected = best; userPicked = true; } else userPicked = false;
+});
+setInterval(() => { if (!userPicked) { const fresh = villagers.filter((v) => v.probs && performance.now() - v.decidedAt < 1500); if (fresh.length) selected = pick(fresh); } }, 5000);
+
+// ------------------------------------------------------------------------ simulate
+function step(dt) {
+  const dtm = world.clockHeld ? 0 : dt * SIM_MIN_PER_SEC;
+  world.minute += dtm; if (world.minute >= 1440) { world.minute -= 1440; world.day++; }
+  const slow = world.weather === "snow" ? 0.7 : world.weather === "storm" ? 0.85 : 1;
+  for (const v of villagers) {
+    const dx = v.tx - v.x, dy = v.ty - v.y, d = Math.hypot(dx, dy);
+    const sp = v.speed * slow * (v.action === "flee" || v.action === "help" ? 1.7 : 1);
+    if (d > 2) { const s = Math.min(d, sp * dt); v.x += dx / d * s; v.y += dy / d * s; v.arrived = false; }
+    else {
+      v.arrived = true;
+      if (Math.random() < dt * 0.5) { const p = destination(v, v.action); const a = rnd(0, 6.283), r = Math.sqrt(Math.random()) * p.r * 0.82; v.tx = p.x + Math.cos(a) * r; v.ty = p.y + Math.sin(a) * r; }
+    }
+    v.flash = Math.max(0, v.flash - dt * 1.6);
+    v.hunger = clamp(v.hunger + 0.11 * dtm); v.lonely = clamp(v.lonely + 0.06 * dtm);
+    v.energy = clamp(v.energy - 0.07 * dtm);
+    if (!v.arrived) continue;
+    switch (v.action) {
+      case "work": v.energy = clamp(v.energy - 0.03 * dtm); v.purse += dtm / 60; if (v.purse >= 1) { v.coins += 1; v.purse -= 1; } break;
+      case "eat": if (!v.paid) { v.coins = Math.max(0, v.coins - 2); v.paid = true; } v.hunger = clamp(v.hunger - 2.6 * dtm); v.lonely = clamp(v.lonely - 0.5 * dtm); break;
+      case "sleep": v.energy = clamp(v.energy + 0.29 * dtm); break;
+      case "shop": if (!v.paid) { v.coins = Math.max(0, v.coins - 3); v.paid = true; } break;
+      case "chat": case "party": v.lonely = clamp(v.lonely - 1.0 * dtm); break;
+      case "rest": v.energy = clamp(v.energy + 0.12 * dtm); break;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------- draw
+const drops = Array.from({ length: 260 }, () => ({ x: rnd(0, W), y: rnd(0, H), s: rnd(0.6, 1.4) }));
+let bolt = 0;
+function label(text, x, y, color = "rgba(234,240,255,0.72)") { ctx.font = "600 15px 'Space Grotesk', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = color; ctx.fillText(text.toUpperCase(), x, y); }
+function building(p, color, w, h) {
+  ctx.fillStyle = "rgba(16,22,44,0.92)"; ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.shadowColor = color; ctx.shadowBlur = 16;
+  ctx.beginPath(); ctx.roundRect(p.x - w / 2, p.y - h / 2, w, h, 10); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+}
+function draw(t) {
+  const h = world.minute / 60;
+  const night = h < 5 || h >= 21 ? 1 : h < 7 ? (7 - h) / 2 : h >= 19 ? (h - 19) / 2 : 0;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#0a1020"; ctx.fillRect(0, 0, W, H);
+  // ground
+  const g = ctx.createRadialGradient(670, 470, 60, 670, 470, 900); g.addColorStop(0, "rgba(40,62,110,0.34)"); g.addColorStop(1, "rgba(8,12,26,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // paths
+  ctx.strokeStyle = "rgba(140,160,255,0.11)"; ctx.lineWidth = 9; ctx.lineCap = "round";
+  for (const k of Object.keys(PLACES)) if (k !== "square") { ctx.beginPath(); ctx.moveTo(670, 470); ctx.lineTo(PLACES[k].x, PLACES[k].y); ctx.stroke(); }
+  // forest
+  for (let i = 0; i < 46; i++) { const a = i * 2.399, r = 14 + (i * 37 % 96); const x = 125 + Math.cos(a) * r, y = 150 + Math.sin(a) * r * 0.9;
+    ctx.fillStyle = `rgba(${30 + i % 5 * 6},${110 + i % 7 * 8},${86 + i % 3 * 10},0.5)`; ctx.beginPath(); ctx.arc(x, y, 13 + i % 4 * 3, 0, 6.283); ctx.fill(); }
+  label("Forest", 125, 280);
+  // lake
+  const lk = PLACES.lake; const lg = ctx.createRadialGradient(lk.x, lk.y, 10, lk.x, lk.y, 130); lg.addColorStop(0, "rgba(40,150,230,0.55)"); lg.addColorStop(1, "rgba(20,70,160,0.18)");
+  ctx.fillStyle = lg; ctx.beginPath(); ctx.ellipse(lk.x, lk.y, 128, 96, 0.2, 0, 6.283); ctx.fill(); ctx.strokeStyle = "rgba(62,232,255,0.35)"; ctx.lineWidth = 1.5; ctx.stroke();
+  label("Lake", lk.x, lk.y + 122);
+  // farm
+  const f = PLACES.farm;
+  for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? "rgba(255,194,61,0.12)" : "rgba(61,255,168,0.10)"; ctx.fillRect(f.x - 104, f.y - 84 + i * 28, 208, 24); }
+  ctx.strokeStyle = "rgba(255,194,61,0.35)"; ctx.lineWidth = 1.5; ctx.strokeRect(f.x - 108, f.y - 88, 216, 176); label("Farm", f.x, f.y + 112);
+  // square
+  const sq = PLACES.square; ctx.fillStyle = "rgba(130,150,255,0.08)"; ctx.strokeStyle = "rgba(130,150,255,0.4)"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(sq.x, sq.y, 78, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(sq.x, sq.y, 9, 0, 6.283); ctx.fillStyle = "rgba(62,232,255,0.6)"; ctx.fill();
+  label("Square", sq.x, sq.y + 102);
+  // buildings
+  for (const [k, color, w, hh] of [["tavern", "#ff9d5c", 104, 70], ["market", "#3ee8ff", 124, 78], ["chapel", "#a77bff", 84, 84], ["mill", "#ffc23d", 100, 80],
+    ["forge", "#ff3d6e", 78, 60], ["bakery", "#ffe45c", 78, 60], ["school", "#3dffa8", 84, 62], ["gate", "#8d97bf", 96, 40]]) {
+    const p = PLACES[k]; building(p, color, w, hh); label(p.label, p.x, p.y + hh / 2 + 20);
+  }
+  // homes
+  for (const hm of homes) { ctx.fillStyle = "rgba(22,30,58,0.95)"; ctx.strokeStyle = "rgba(130,150,255,0.3)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(hm.x - 15, hm.y - 12, 30, 24, 5); ctx.fill(); ctx.stroke();
+    if (night > 0.3) { ctx.fillStyle = `rgba(255,214,120,${0.55 * night})`; ctx.fillRect(hm.x - 4, hm.y - 3, 8, 6); } }
+  // the event
+  if (world.news && world.place) { const p = PLACES[world.place], pulse = 0.5 + 0.5 * Math.sin(t / 180);
+    ctx.strokeStyle = `rgba(255,95,210,${0.35 + 0.4 * pulse})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 26 + pulse * 10, 0, 6.283); ctx.stroke(); }
+  // night
+  if (night > 0) { ctx.fillStyle = `rgba(2,4,18,${0.5 * night})`; ctx.fillRect(0, 0, W, H); }
+  // villagers
+  for (const v of villagers) {
+    const c = ACTIONS[v.action].color;
+    if (v.flash > 0) { ctx.strokeStyle = c; ctx.globalAlpha = v.flash * 0.8; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(v.x, v.y, 5 + (1 - v.flash) * 16, 0, 6.283); ctx.stroke(); ctx.globalAlpha = 1; }
+    ctx.fillStyle = c; ctx.shadowColor = c; ctx.shadowBlur = 9; ctx.beginPath(); ctx.arc(v.x, v.y, v === selected ? 6.5 : 4.2, 0, 6.283); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  if (selected) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(selected.x, selected.y, 12, 0, 6.283); ctx.stroke();
+    ctx.font = "600 15px 'Space Grotesk', sans-serif"; ctx.textAlign = "left"; ctx.fillStyle = "#fff"; ctx.fillText(selected.name, selected.x + 17, selected.y + 5); }
+  // weather
+  if (world.weather === "rain" || world.weather === "storm" || world.weather === "snow") {
+    const snow = world.weather === "snow", fast = world.weather === "storm" ? 1500 : snow ? 90 : 900;
+    ctx.strokeStyle = snow ? "rgba(255,255,255,0.7)" : "rgba(150,190,255,0.35)"; ctx.fillStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = 1.2;
+    for (const d of drops) { d.y += fast * d.s / 60; d.x -= (snow ? 12 : 220) * d.s / 60; if (d.y > H) { d.y = -10; d.x = rnd(0, W + 200); }
+      if (snow) { ctx.beginPath(); ctx.arc(d.x, d.y, 1.6 * d.s, 0, 6.283); ctx.fill(); } else { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 5, d.y + 20); ctx.stroke(); } }
+    if (world.weather === "storm") { if (Math.random() < 0.006) bolt = 1; if (bolt > 0) { ctx.fillStyle = `rgba(210,225,255,${0.28 * bolt})`; ctx.fillRect(0, 0, W, H); bolt -= 0.08; } }
+  }
+  if (world.weather === "heat") { ctx.fillStyle = "rgba(255,150,40,0.07)"; ctx.fillRect(0, 0, W, H); }
+}
+
+// -------------------------------------------------------------------------- panels
+$("doing").innerHTML = KEYS.map((k) => `<div class="bar"><span>${k}</span><div class="track"><div class="fill" id="f_${k}" style="background:${ACTIONS[k].color};width:0"></div></div><span class="n" id="n_${k}">0</span></div>`).join("");
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+function panels() {
+  const now = performance.now();
+  stamps = stamps.filter((s) => now - s < 4000);
+  $("sRate").textContent = Math.round(stamps.length / 4);
+  $("sTotal").textContent = total.toLocaleString();
+  $("sMs").textContent = Math.round(lastMs / lastK);
+  $("sMsL").textContent = `ms per decision · ${Math.min(K, N)} a pass`;
+  $("time").textContent = hhmm(world.minute);
+  $("phase").textContent = `${DAYS[world.day % 7]} ${phaseOf(world.minute)} · ${world.weather}`;
+  const counts = Object.fromEntries(KEYS.map((k) => [k, 0])); for (const v of villagers) counts[v.action]++;
+  for (const k of KEYS) { $("f_" + k).style.width = `${100 * counts[k] / N}%`; $("n_" + k).textContent = counts[k]; }
+  const v = selected;
+  if (v && v.probs) {
+    const top = KEYS.slice().sort((a, b) => v.probs[b] - v.probs[a]).slice(0, 4);
+    $("whoBody").innerHTML = `<div class="nm">${v.name} <span style="color:${ACTIONS[v.action].color}">→ ${v.action}</span></div><div class="ds">${esc(v.asked)}</div>` +
+      top.map((k) => `<div class="bar ${k === v.action ? "pick" : ""}" style="grid-template-columns:62px 1fr 46px;margin-bottom:5px"><span>${k}</span><div class="track"><div class="fill" style="background:${ACTIONS[k].color};width:${100 * v.probs[k]}%"></div></div><span class="n">${(100 * v.probs[k]).toFixed(0)}%</span></div>`).join("");
+  }
+}
+setInterval(panels, 250);
+
+let last = performance.now();
+function frame(t) { const dt = Math.min(0.1, (t - last) / 1000); last = t; step(dt); draw(t); requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

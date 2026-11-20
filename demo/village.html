@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- The village: the ant farm in 3D. It opens on one villager waking up at home, follows her
+     out of the door, then pulls back until the whole village is in view. Every move of every
+     villager is a live SparkScore decision. Serve with demo/serve.py and open /village.html
+     (?n=villagers&k=villagers per pass&skip=1 to start at the wide view).
+     The village can be given a charter (demo/laws/charter.md), sent once as a knowledge pack and
+     named by every later request; one of its rules can be rewritten from the panel.
+     ?demo=1 plays the opening and three town-crier announcements by itself; ?demo=law&skip=1
+     plays the charter sequence. Both set window.__demoDone when finished, for recording. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SparkScore · the village</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<style>
+:root { --text: #fff; --dim: rgba(255,255,255,0.72); --mono: "JetBrains Mono", ui-monospace, monospace; --head: "Space Grotesk", "Inter", sans-serif; --body: "Inter", system-ui, sans-serif; --u: min(1vw, 1.78vh); }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1026; font-family: var(--body); color: var(--text); -webkit-font-smoothing: antialiased; }
+canvas#c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.glass { background: rgba(10, 14, 30, 0.55); border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(14px); border-radius: calc(var(--u) * 1.1); }
+#brand { position: absolute; left: calc(var(--u) * 2); top: calc(var(--u) * 1.6); display: flex; align-items: center; gap: calc(var(--u) * 0.8);
+  font: 700 calc(var(--u) * 2) var(--head); text-shadow: 0 2px 14px rgba(0,0,0,0.5); }
+#brand svg { width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); }
+#counts { position: absolute; right: calc(var(--u) * 2); top: calc(var(--u) * 1.6); display: flex; gap: calc(var(--u) * 2.4); padding: calc(var(--u) * 1) calc(var(--u) * 1.6); }
+.cnt .v { font: 700 calc(var(--u) * 2.9) var(--head); font-variant-numeric: tabular-nums; line-height: 1; }
+.cnt .v small { font-size: 0.5em; font-weight: 500; color: var(--dim); }
+.cnt .l { font: 500 calc(var(--u) * 0.8) var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: calc(var(--u) * 0.45); }
+#card { position: absolute; left: calc(var(--u) * 2); bottom: calc(var(--u) * 2); width: calc(var(--u) * 24); padding: calc(var(--u) * 1.1) calc(var(--u) * 1.4); transition: opacity 0.6s; }
+#card .nm { font: 700 calc(var(--u) * 1.7) var(--head); }
+#card .nm span { font-weight: 500; color: var(--dim); font-size: 0.7em; }
+#card .did { font: 600 calc(var(--u) * 1.25) var(--head); margin: calc(var(--u) * 0.3) 0 calc(var(--u) * 0.7); }
+.bar { display: grid; grid-template-columns: calc(var(--u) * 6) 1fr calc(var(--u) * 3); align-items: center; gap: calc(var(--u) * 0.6); font: 500 calc(var(--u) * 0.95) var(--mono); color: var(--dim); margin-top: calc(var(--u) * 0.35); }
+.bar .track { height: calc(var(--u) * 0.55); border-radius: 99px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.bar .fill { height: 100%; border-radius: 99px; transition: width 0.4s; }
+.bar .n { text-align: right; color: #fff; }
+#caption { position: absolute; left: 0; right: 0; bottom: calc(var(--u) * 7.5); text-align: center; font: 600 calc(var(--u) * 2.5) var(--head); letter-spacing: -0.01em;
+  text-shadow: 0 2px 18px rgba(0,0,0,0.75), 0 0 2px rgba(0,0,0,0.6); transition: opacity 0.8s; pointer-events: none; padding: 0 20%; }
+#crier { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--u) * 2); display: flex; align-items: center; gap: calc(var(--u) * 0.6);
+  padding: calc(var(--u) * 0.7) calc(var(--u) * 0.9); transition: opacity 0.8s; }
+#crier input { width: calc(var(--u) * 30); font: 500 calc(var(--u) * 1.15) var(--body); color: #fff; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.18);
+  border-radius: calc(var(--u) * 0.7); padding: calc(var(--u) * 0.6) calc(var(--u) * 0.8); outline: none; }
+#crier input::placeholder { color: rgba(255,255,255,0.5); }
+#crier button { font: 500 calc(var(--u) * 0.95) var(--body); color: #fff; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); border-radius: 99px;
+  padding: calc(var(--u) * 0.5) calc(var(--u) * 0.9); cursor: pointer; white-space: nowrap; }
+#crier button:hover { background: rgba(255,255,255,0.22); }
+.hide { opacity: 0; pointer-events: none; }
+#down { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 14px 20px; font: 600 16px var(--body); display: none; }
+#brand small { display: block; font: 500 calc(var(--u) * 0.85) var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin-top: calc(var(--u) * 0.2); }
+#told { position: absolute; left: 50%; top: calc(var(--u) * 8.2); transform: translateX(-50%); max-width: 62%; padding: calc(var(--u) * 1.1) calc(var(--u) * 2); text-align: center; transition: opacity 0.5s; border-color: rgba(255, 95, 210, 0.7); }
+#told .who { font: 600 calc(var(--u) * 0.95) var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: #ff8fe0; }
+#told .what { font: 700 calc(var(--u) * 2.7) var(--head); letter-spacing: -0.01em; margin: calc(var(--u) * 0.35) 0 calc(var(--u) * 0.6); }
+#told .tally { font: 500 calc(var(--u) * 1.2) var(--body); color: var(--dim); min-height: 1.3em; }
+#told .tally b { color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }
+#told .tally span { margin: 0 calc(var(--u) * 0.6); white-space: nowrap; }
+#crier.typing { border-color: rgba(255, 95, 210, 0.9); box-shadow: 0 0 0 calc(var(--u) * 0.3) rgba(255, 95, 210, 0.25); transform: translateX(-50%) scale(1.35); transform-origin: 50% 100%; }
+#crier { transition: opacity 0.8s, transform 0.4s, box-shadow 0.4s; }
+#end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--u) * 1.4); background: rgba(8, 10, 24, 0.78); backdrop-filter: blur(10px); transition: opacity 0.9s; z-index: 30; }
+#end .big { display: flex; align-items: center; gap: calc(var(--u) * 1.4); font: 700 calc(var(--u) * 7) var(--head); letter-spacing: -0.02em; }
+#end .big svg { width: calc(var(--u) * 6.5); height: calc(var(--u) * 6.5); }
+#end .line { font: 600 calc(var(--u) * 2.6) var(--head); }
+#end .url { font: 500 calc(var(--u) * 1.5) var(--mono); color: var(--dim); margin-top: calc(var(--u) * 1); }
+#law { position: absolute; left: calc(var(--u) * 2); top: calc(var(--u) * 8.2); width: calc(var(--u) * 31); padding: calc(var(--u) * 1.2) calc(var(--u) * 1.5); transition: opacity 0.6s, border-color 0.6s; }
+#law.on { border-color: rgba(255, 210, 63, 0.75); }
+#law .who { font: 600 calc(var(--u) * 0.9) var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: #ffd23f; }
+#law .ttl { font: 700 calc(var(--u) * 2.3) var(--head); letter-spacing: -0.01em; margin: calc(var(--u) * 0.3) 0 calc(var(--u) * 0.2); }
+#law .meta { font: 500 calc(var(--u) * 0.95) var(--mono); color: var(--dim); }
+#law .rule { display: flex; gap: calc(var(--u) * 0.6); font: 500 calc(var(--u) * 1.05) var(--body); line-height: 1.3; margin-top: calc(var(--u) * 0.38); padding: calc(var(--u) * 0.15) calc(var(--u) * 0.5); border-radius: calc(var(--u) * 0.4); color: var(--dim); transition: background 0.5s, color 0.5s; }
+#law .rule b { font: 600 0.85em var(--mono); color: #ffd23f; flex: none; padding-top: 0.12em; }
+#law .rule.hot { background: rgba(255, 210, 63, 0.24); color: #fff; }
+#law .rule.edited { color: #7dffb0; } #law .rule.edited b { color: #7dffb0; }
+#book { position: absolute; right: calc(var(--u) * 2); top: calc(var(--u) * 7.4); bottom: calc(var(--u) * 2.4); width: calc(var(--u) * 55); background: #f6eedb; color: #2a2317; border-radius: calc(var(--u) * 0.6);
+  box-shadow: 0 calc(var(--u) * 1.2) calc(var(--u) * 4) rgba(0,0,0,0.45); overflow: hidden; transition: opacity 0.7s, transform 0.7s; z-index: 20; display: flex; flex-direction: column; }
+#book.hide { transform: translateY(calc(var(--u) * 3)); }
+#bookIn { flex: 1; overflow: hidden; padding: calc(var(--u) * 1.6) calc(var(--u) * 2.4) 0; font: 400 calc(var(--u) * 1.02) Georgia, "Times New Roman", serif; line-height: 1.42; }
+#bookIn h1 { font: 700 calc(var(--u) * 2.2) Georgia, serif; margin: 0 0 calc(var(--u) * 0.5); }
+#bookIn h2 { font: 700 calc(var(--u) * 1.3) Georgia, serif; margin: calc(var(--u) * 1.1) 0 calc(var(--u) * 0.4); color: #7a4a12; }
+#bookIn p { margin: 0 0 calc(var(--u) * 0.45); }
+#bookIn p.rule { background: #ffe58a; border-left: calc(var(--u) * 0.3) solid #d99a00; padding: calc(var(--u) * 0.22) calc(var(--u) * 0.7); border-radius: calc(var(--u) * 0.25); }
+#bookIn p.rule.hot { background: #ffc94a; box-shadow: 0 0 0 calc(var(--u) * 0.2) #d97a00; }
+#bookIn s { color: #b3261e; } #bookIn ins { color: #0f7a3a; text-decoration: none; font-weight: 700; background: #d9f7e3; }
+#bookFoot { flex: none; display: flex; align-items: center; gap: calc(var(--u) * 1); padding: calc(var(--u) * 0.8) calc(var(--u) * 2.4); background: #e9dfc6; font: 600 calc(var(--u) * 1) var(--mono); color: #4a3d25; }
+#bookBar { flex: 1; height: calc(var(--u) * 0.5); border-radius: 99px; background: rgba(0,0,0,0.14); overflow: hidden; } #bookFill { height: 100%; width: 0; background: #d97a00; border-radius: 99px; }
+#law .art { font: 500 calc(var(--u) * 1.15) var(--body); line-height: 1.35; margin-top: calc(var(--u) * 0.6); padding-left: calc(var(--u) * 0.9); border-left: calc(var(--u) * 0.2) solid rgba(255, 210, 63, 0.7); }
+#law .art b { font: 600 0.85em var(--mono); color: #ffd23f; margin-right: 0.5em; }
+#law .more { font: 500 calc(var(--u) * 0.9) var(--body); color: var(--dim); margin-top: calc(var(--u) * 0.6); }
+#law .tally { font: 500 calc(var(--u) * 1.05) var(--body); color: var(--dim); margin-top: calc(var(--u) * 0.8); padding-top: calc(var(--u) * 0.7); border-top: 1px solid rgba(255,255,255,0.14); }
+#law .tally b { color: #fff; font-variant-numeric: tabular-nums; } #law .tally span { margin-right: calc(var(--u) * 0.8); white-space: nowrap; }
+#law .speed { font: 500 calc(var(--u) * 0.95) var(--mono); color: var(--dim); margin-top: calc(var(--u) * 0.6); } #law .speed b { color: #fff; }
+body.laws #told { left: auto; right: calc(var(--u) * 2); transform: none; max-width: calc(var(--u) * 33); padding: calc(var(--u) * 0.9) calc(var(--u) * 1.4); }
+body.laws #told .what { font-size: calc(var(--u) * 1.75); }
+body.laws #told .tally { font-size: calc(var(--u) * 1.05); }
+body.booking #caption { right: calc(var(--u) * 59); padding: 0 calc(var(--u) * 2.5); bottom: calc(var(--u) * 12); }
+#lawBtns { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 0.5); margin-top: calc(var(--u) * 0.9); }
+#lawBtns button { font: 500 calc(var(--u) * 0.95) var(--body); color: #fff; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); border-radius: 99px; padding: calc(var(--u) * 0.45) calc(var(--u) * 0.9); cursor: pointer; }
+#lawBtns button.sel { background: rgba(255, 210, 63, 0.3); border-color: rgba(255, 210, 63, 0.8); }
+#lidT, #lidB { position: fixed; left: 0; right: 0; height: 51%; background: #000; z-index: 40; pointer-events: none; transition: height 1.5s cubic-bezier(.5,0,.2,1); }
+#lidT { top: 0; } #lidB { bottom: 0; }
+body.awake #lidT, body.awake #lidB { height: 0; }
+body.blink #lidT, body.blink #lidB { height: 51%; transition-duration: 0.22s; }
+</style>
+<script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="lidT"></div><div id="lidB"></div>
+<canvas id="c"></canvas>
+<div id="brand">
+  <svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ee8ff"/><stop offset="1" stop-color="#b07bff"/></linearGradient></defs>
+    <path d="M20 2 L24 16 L38 20 L24 24 L20 38 L16 24 L2 20 L16 16 Z" fill="url(#lg)"/></svg><div>SparkScore<small>live on one DGX Spark</small></div>
+</div>
+<div id="counts" class="glass">
+  <div class="cnt"><div class="v"><span id="cView">0</span><small> / <span id="cAll">0</span></small></div><div class="l">villagers in view</div></div>
+  <div class="cnt"><div class="v" id="cTotal">0</div><div class="l">decisions made</div></div>
+  <div class="cnt"><div class="v" id="cRate">0</div><div class="l">decisions / second</div></div>
+  <div class="cnt"><div class="v"><span id="cMs">–</span><small> ms</small></div><div class="l">per decision, live</div></div>
+</div>
+<div id="card" class="glass hide"></div>
+<div id="caption"></div>
+<div id="told" class="glass hide"><div class="who">You tell the village</div><div class="what" id="toldWhat"></div><div class="tally" id="toldTally"></div></div>
+<div id="end" class="hide"><div class="big"><svg viewBox="0 0 40 40"><path d="M20 2 L24 16 L38 20 L24 24 L20 38 L16 24 L2 20 L16 16 Z" fill="url(#lg)"/></svg>SparkScore</div>
+  <div class="line" id="endLine"></div><div class="url">github.com/Enntity/sparkscore</div></div>
+<div id="law" class="glass hide"><div class="who" id="lawWho">Law</div><div class="ttl" id="lawTtl">No charter</div><div class="meta" id="lawMeta">Villagers follow their own judgement.</div>
+  <div id="lawArts"></div><div class="tally" id="lawTally"></div><div class="speed" id="lawSpeed"></div><div id="lawBtns"></div></div>
+<div id="book" class="hide"><div id="bookIn"></div><div id="bookFoot"><span id="bookNote"></span><div id="bookBar"><div id="bookFill"></div></div><span id="bookCount"></span></div></div>
+<div id="crier" class="glass hide">
+  <input id="crierIn" placeholder="Tell the village something, then press Enter" autocomplete="off" spellcheck="false">
+  <span id="crierBtns" style="display:flex;gap:calc(var(--u) * 0.5)"></span>
+</div>
+<div id="down" class="glass">SparkScore is not answering</div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const Q = new URLSearchParams(location.search);
+const N = +(Q.get("n") || 300), K = +(Q.get("k") || 16);
+const $ = (id) => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
+const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
+const smooth = (u) => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
+
+// =============================================================== the village
+// A place has a centre, a building footprint (hw, hd half-sizes; 0 for open ground) and a
+// radius villagers gather in around it.
+const PLACES = {
+  square: { x: 0, z: 0, hw: 0, hd: 0, r: 9, label: "Square" },
+  tavern: { x: -27, z: -17, hw: 5.5, hd: 4, r: 6, label: "Tavern" },
+  market: { x: 27, z: -17, hw: 0, hd: 0, r: 8, label: "Market" },
+  chapel: { x: 0, z: -36, hw: 4, hd: 5.5, r: 6, label: "Chapel" },
+  farm:   { x: -55, z: 30, hw: 0, hd: 0, r: 11, label: "Farm" },
+  mill:   { x: 52, z: 25, hw: 4, hd: 4, r: 7, label: "Mill" },
+  forge:  { x: 31, z: 6, hw: 3.6, hd: 3, r: 5, label: "Forge" },
+  bakery: { x: 15, z: 20, hw: 3.8, hd: 3.2, r: 5, label: "Bakery" },
+  school: { x: -27, z: 14, hw: 4.5, hd: 3.4, r: 6, label: "School" },
+  lake:   { x: 58, z: -36, hw: 0, hd: 0, r: 16, label: "Lake" },
+  forest: { x: -64, z: -38, hw: 0, hd: 0, r: 17, label: "Forest" },
+  gate:   { x: 0, z: 50, hw: 0, hd: 0, r: 6, label: "Gate" },
+};
+const ACTIONS = {
+  work:  { say: "go to their job", color: 0xffc23d, verb: "working", icon: "🔨" },
+  eat:   { say: "have a meal at the tavern", color: 0xff9d5c, verb: "eating", at: "tavern", icon: "🍲" },
+  sleep: { say: "go home to bed", color: 0x6f7cff, verb: "asleep", icon: "💤" },
+  chat:  { say: "meet friends in the square", color: 0x3dffa8, verb: "chatting", at: "square", icon: "💬" },
+  hide:  { say: "lock themselves in at home", color: 0x9aa3c7, verb: "hiding", icon: "🚪" },
+  look:  { say: "go and watch what is happening", color: 0xffffff, verb: "watching", icon: "👀" },
+  help:  { say: "go and help with what is happening", color: 0xff3d6e, verb: "helping", icon: "🪣" },
+  flee:  { say: "run away to the forest", color: 0xff5fd2, verb: "fleeing", at: "forest", icon: "🏃" },
+  party: { say: "celebrate in the square", color: 0xffe45c, verb: "celebrating", at: "square", icon: "🎉" },
+  // Offered only to the household the camera opens on.
+  breakfast: { say: "eat at home with the family", color: 0xffb37a, verb: "eating", icon: "🥣" },
+  talk:  { say: "talk with the family at home", color: 0x7fe0ff, verb: "talking", icon: "💬" },
+};
+const HOME_ONLY = new Set(["sleep", "hide", "breakfast", "talk"]);
+const KEYS = ["work", "eat", "sleep", "chat", "hide", "look", "help", "flee", "party"];
+const HOME_KEYS = [...KEYS, "breakfast", "talk"];
+const crit = (keys) => Object.fromEntries(keys.map((k) => [k, null]));
+const CRITERIA = crit(KEYS), HOME_CRITERIA = crit(HOME_KEYS);
+const ROLES = [
+  ["farmer", "farm", 5, 0x6a9a3b], ["miller", "mill", 2, 0xd9c7a0], ["blacksmith", "forge", 2, 0x5a5f6b], ["baker", "bakery", 2, 0xf2e6d0], ["fisher", "lake", 2, 0x3b8fb8],
+  ["merchant", "market", 3, 0xa8459a], ["guard", "gate", 2, 0xb5362d], ["priest", "chapel", 1, 0x2d2a3a], ["innkeeper", "tavern", 1, 0xc9792d], ["bard", "tavern", 1, 0x2fb3a0],
+  ["schoolchild", "school", 3, 0xf0c33c], ["teacher", "school", 1, 0x7a5cc4], ["elder", null, 2, 0x8b7d6b],
+];
+const TRAITS = ["brave", "timid", "greedy", "kind", "lazy", "curious", "devout", "cheerful", "grumpy", "hard-working", "cautious", "reckless", "shy", "sociable"];
+const NAMES = ("Tomas Elin Bram Odette Garrick Isolde Wren Alaric Hilda Perrin Sunniva Cedric Maud Jorah Tilda Osric Linnea Hugh Agnes Rolf Petra Emeric Ysolt Dunstan Greta Faron Lisbet Anselm Brida " +
+  "Corwin Edda Lukas Marga Niall Orla Piers Runa Stellan Thea Ulric Vesna Wilmar Yara Zane Alba Beric Clara Dain Esme Finn Gwen Harl Ines Joss Kira Leif Mina Nico Olwen Pell Quill Rhea Sten Tove " +
+  "Aldous Bettina Caspian Delphine Ewan Frida Godric Henna Ivo Jessamy Kester Lorna Merrick Nesta Oswin Prudence Quentin Rosalind Silas Tamsin Urien Viola Wystan Xanthe Yorick Zelda Ansel Blythe " +
+  "Crispin Dorcas Eamon Fenella Gideon Hester Ingram Juno Kenelm Lavinia Magnus Nerys Orson Philippa Rafe Sabine Thaddeus Una Vaughn Winifred Alder Briar Cato Dulcie Elric Fleur Gareth Honor").split(" ");
+
+// The house the camera opens on: open at the top, low walls on the camera side.
+const H = { x: -8, z: 25, w: 11, d: 8 };
+const BEDS = [[-4.3, 0], [-2.9, 1], [0.2, 2], [3.6, 3]];        // x offset of each bed, who sleeps in it
+const SEATS = [[1.3, 1.5], [3.9, 1.5], [2.6, 0.5], [2.6, 2.6]];
+const DOOR_X = -3.2;
+const doorIn = { x: H.x + DOOR_X, z: H.z + H.d / 2 - 0.9 }, doorOut = { x: H.x + DOOR_X, z: H.z + H.d / 2 + 1.4 };
+const inHouse = (x, z) => Math.abs(x - H.x) < H.w / 2 && Math.abs(z - H.z) < H.d / 2;
+
+const homes = [];
+for (const [x0, z0, cols, rows] of [[-66, -14, 4, 4], [-41, 33, 5, 3], [10, 34, 5, 3], [45, -9, 4, 3], [-40, -42, 5, 2], [12, -42, 5, 2]])
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const x = x0 + c * 6.8 + rnd(-0.5, 0.5), z = z0 + r * 7.2 + rnd(-0.5, 0.5);
+    if (Math.hypot(x - H.x, z - H.z) < 10) continue;
+    homes.push({ x, z, hw: 2.3, hd: 2.1, rot: 0 });
+  }
+// Solid footprints villagers walk around.
+const solids = [...homes.map((h) => ({ x: h.x, z: h.z, hw: h.hw, hd: h.hd })), { x: H.x, z: H.z, hw: H.w / 2, hd: H.d / 2, hero: true }];
+for (const p of Object.values(PLACES)) if (p.hw) solids.push({ x: p.x, z: p.z, hw: p.hw, hd: p.hd });
+// Furniture in the opening house: beds, table, wardrobe, stove.
+const FURNITURE = [...BEDS.map(([bx]) => ({ x: H.x + bx, z: H.z - H.d / 2 + 1.5, hw: 0.62, hd: 1.2 })),
+  { x: H.x + 2.6, z: H.z + 1.55, hw: 0.85, hd: 0.55 }, { x: H.x + 4.6, z: H.z - H.d / 2 + 0.6, hw: 0.55, hd: 0.35 }, { x: H.x - 4.6, z: H.z + 2.9, hw: 0.25, hd: 0.25 }];
+
+const world = { minute: 7 * 60 + 20, day: 0, news: "", place: null };
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const phaseOf = (m) => { const h = m / 60; return h < 5 ? "night" : h < 7 ? "dawn" : h < 12 ? "morning" : h < 14 ? "midday" : h < 18 ? "afternoon" : h < 21 ? "evening" : "night"; };
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.floor(m % 60)).padStart(2, "0")}`;
+
+// ----------------------------------------------------------------- villagers
+const SKIN = [0xf2c9a0, 0xe0ac7e, 0xc68a5c, 0x9a6540, 0x7a4a2c, 0xf6d7b8], HAIR = [0x2b1d14, 0x4a3020, 0x8a5a2b, 0xc9a25a, 0x1a1a1a, 0xa3442a], PANTS = [0x3a4466, 0x4a3b2c, 0x2e3a2e, 0x554a66, 0x333333];
+const villagers = [];
+const rolePool = ROLES.flatMap(([name, place, weight, shirt]) => Array(weight).fill([name, place, shirt]));
+const FAMILY = [
+  { name: "Mara", role: "merchant", workplace: "market", shirt: 0xe8553d, age: 34, traits: ["kind", "hard-working"], kin: "husband Tomas, daughter Elin and mother Hilda", hunger: 84, energy: 90 },
+  { name: "Tomas", role: "farmer", workplace: "farm", shirt: 0x6a9a3b, age: 37, traits: ["cheerful", "lazy"], kin: "wife Mara, daughter Elin and mother-in-law Hilda", hunger: 50, energy: 74 },
+  { name: "Elin", role: "schoolchild", workplace: "school", shirt: 0xf0c33c, age: 9, traits: ["curious", "sociable"], kin: "mother Mara, father Tomas and grandmother Hilda", hunger: 58, energy: 82 },
+  { name: "Hilda", role: "elder", workplace: null, shirt: 0x8b7d6b, age: 71, traits: ["devout", "cautious"], kin: "daughter Mara, son-in-law Tomas and granddaughter Elin", hunger: 56, energy: 80 },
+];
+const familyNames = new Set(FAMILY.map((f) => f.name));
+const otherNames = NAMES.filter((n) => !familyNames.has(n));
+for (let i = 0; i < N; i++) {
+  const fam = FAMILY[i];
+  const [role, workplace, shirt] = fam ? [fam.role, fam.workplace, fam.shirt] : rolePool[i % rolePool.length];
+  const home = fam ? null : homes[(i - 4) % homes.length];
+  const t1 = pick(TRAITS); let t2 = pick(TRAITS); while (t2 === t1) t2 = pick(TRAITS);
+  const age = fam ? fam.age : role === "schoolchild" ? Math.floor(rnd(7, 14)) : role === "elder" ? Math.floor(rnd(66, 88)) : Math.floor(rnd(18, 62));
+  const v = {
+    i, id: "v" + i, name: fam ? fam.name : otherNames[(i - 4) % otherNames.length], role, workplace, home, fam: !!fam, kin: fam ? fam.kin : "", traits: fam ? fam.traits : [t1, t2], age,
+    x: 0, z: 0, y: 0, rot: 0, phase: rnd(0, 6), swing: 0, path: [], lying: false, hidden: false, seat: -1,
+    hunger: fam ? fam.hunger : rnd(15, 60), energy: fam ? fam.energy : rnd(55, 95), coins: fam ? 6 : Math.floor(rnd(0, 14)), lonely: fam ? 20 : rnd(10, 60), purse: 0,
+    action: "sleep", arrived: true, paid: true, decidedAt: fam ? performance.now() + (i ? 9300 + i * 600 : 3300) : -1e9, shown: -1e9, dirty: true, probs: null, asked: "", inflight: false,
+    speed: rnd(3.0, 4.2) * (age < 14 ? 1.1 : age > 65 ? 0.7 : 1), size: age < 14 ? 0.66 : age > 65 ? 0.93 : rnd(0.95, 1.06),
+    shirt, skin: pick(SKIN), hair: age > 60 ? 0xd8d8d8 : pick(HAIR), pants: pick(PANTS),
+  };
+  if (fam) { const [bx] = BEDS[i]; v.x = H.x + bx; v.z = H.z - H.d / 2 + 2.5; v.lying = true; }
+  else { v.x = home.x; v.z = home.z + home.hd + 0.9; v.hidden = true; }
+  villagers.push(v);
+}
+const hero = villagers[0];
+
+const ring = (p, near, far) => { const a = rnd(0, Math.PI * 2), r = rnd(near, far); return { x: p.x + Math.cos(a) * r, z: p.z + Math.sin(a) * r }; };
+function spotAt(key) {
+  const p = PLACES[key];
+  if (key === "farm") return { x: p.x + rnd(-10, 10), z: p.z + rnd(-8, 8) };
+  if (key === "lake") return ring(p, p.r + 0.8, p.r + 3.5);
+  if (!p.hw) return ring(p, 0, p.r);
+  // In front of a building, on the side that faces the square.
+  for (let tries = 0; tries < 20; tries++) { const s = ring(p, 0, Math.max(p.hw, p.hd) + p.r); if (Math.abs(s.x - p.x) > p.hw + 1 || Math.abs(s.z - p.z) > p.hd + 1) return s; }
+  return { x: p.x, z: p.z + p.hd + 2 };
+}
+function aroundEvent() {
+  const p = PLACES[world.place || "square"], base = Math.max(p.hw, p.hd, p.hw ? 0 : p.r * 0.5);
+  return ring(p, base + 2, base + 10);
+}
+function plan(v, action) {
+  const changed = v.action !== action;
+  if (changed) { v.arrived = false; v.paid = false; }
+  v.action = action; v.lying = false;
+  let target, inside = false;
+  if (v.fam && (action === "sleep" || action === "breakfast" || action === "talk" || action === "hide")) {
+    inside = true;
+    if (action === "sleep") target = { x: H.x + BEDS[v.i][0], z: H.z - H.d / 2 + 2.5 };
+    else if (action === "breakfast") { const [sx, sz] = SEATS[v.i]; target = { x: H.x + sx, z: H.z + sz }; }
+    else if (action === "talk") target = { x: H.x + rnd(-2.2, 0.6), z: H.z + rnd(0.2, 2.6) };
+    else target = { x: H.x + rnd(-4, -1), z: H.z + rnd(-0.5, 1.5) };
+  } else if (action === "sleep" || action === "hide") target = { x: v.home.x, z: v.home.z + v.home.hd + 0.9 };
+  else if (action === "work") target = v.workplace ? spotAt(v.workplace) : v.fam ? { x: doorOut.x + rnd(-1.5, 3), z: doorOut.z + rnd(0.5, 2.5) } : { x: v.home.x + rnd(-2, 2), z: v.home.z + v.home.hd + rnd(1.2, 2.6) };
+  else if (action === "look" || action === "help") target = aroundEvent();
+  else target = spotAt(ACTIONS[action].at);
+  const path = [];
+  if (v.fam) {
+    const nowIn = inHouse(v.x, v.z);
+    if (nowIn && !inside) path.push(doorIn, doorOut);
+    if (!nowIn && inside) path.push(doorOut, doorIn);
+  }
+  path.push(target);
+  v.path = path;
+  if (v.hidden && changed) v.hidden = false;
+}
+
+// ============================================================= what the model reads
+const words = (v) => ({
+  hunger: v.hunger < 25 ? "well fed" : v.hunger < 50 ? "a little hungry" : v.hunger < 75 ? "hungry" : "starving",
+  energy: v.energy > 75 ? "well rested" : v.energy > 50 ? "fine" : v.energy > 25 ? "tired" : "exhausted",
+  lonely: v.lonely < 35 ? "" : v.lonely < 70 ? ", wants company" : ", lonely",
+  coins: v.coins <= 0 ? "no money" : v.coins === 1 ? "1 coin" : `${v.coins} coins`,
+});
+function placeName(v) {
+  const a = ACTIONS[v.action];
+  if (v.action === "breakfast" || v.action === "talk") return "at home";
+  if (a.at) return a.at === "forest" ? "in the forest" : `at the ${a.at}`;
+  if (v.action === "sleep" || v.action === "hide") return "at home";
+  if (v.action === "work") return v.workplace ? (v.workplace === "lake" ? "on the lake" : `at the ${v.workplace}`) : "in the garden at home";
+  return world.place ? `at the ${world.place}` : "in the square";
+}
+function describe(v) {
+  const w = words(v), cap = (t) => t[0].toUpperCase() + t.slice(1);
+  const now = `${v.arrived ? "" : "going to be "}${ACTIONS[v.action].verb} ${placeName(v)}`;
+  return `${v.name}: ${v.age}, ${v.role}, ${v.traits[0]}, ${v.traits[1]}${v.kin ? `, lives with ${v.kin}` : ""}. ${cap(w.hunger)}, ${w.energy}${w.lonely}, ${w.coins}. Now: ${now}.`;
+}
+function stateText(roster, keys = KEYS) {
+  const news = world.news ? `The town crier is shouting: "${world.news}"` : "Nothing unusual is happening.";
+  return `Emberfall is a small medieval village.\nTime: ${DAYS[world.day % 7]} ${hhmm(world.minute)}, ${phaseOf(world.minute)}. Weather: clear skies.\n${news}\n\n` +
+    "Each question names one villager. Choose what that villager does next, given who they are, how they feel, the time, the weather and what is happening.\n" +
+    "The actions:\n" + keys.map((k) => `${k}: ${ACTIONS[k].say}`).join("\n") + (roster ? "\n\nVillagers:\n" + roster.join("\n") : "");
+}
+
+// ================================================================ the scoring loop
+let total = 0, busy = false, stamps = [], epoch = 0, focus = hero, closeUp = true;
+let msEach = 0, tally = {}, heard = 0, counting = false;
+let reads = 0, readingNow = false;                    // law-book reads so far; a pass that overlaps one is not a fair timing
+const msBy = { none: 0, law: 0 };                    // model time per decision without a law book, and with one
+// The charter is a knowledge pack: the server reads it once, and every later request names it instead of resending it.
+const RULE_OLD = "Article 1.5. Strangers. When the crier announces a stranger at the gate, only the elders go to look and greet them. Everyone else carries on exactly as before.";
+const RULE_NEW = "Article 1.5. Strangers. When the crier announces a stranger at the gate, every adult leaves their work and goes to look and greet them, and so do the elders. Children stay in school.";
+const CHARTER = { title: "The Charter of Emberfall", base: "", sent: "", edition: "", rules: [["1.1", "Adults are at their trade by day"], ["1.2", "Children are in school by day"], ["1.3", "Elders keep the square"],
+  ["1.4", "The tavern feeds only the starving"], ["1.5", "A stranger: only the elders greet them"], ["1.6", "Fire: every adult helps"], ["1.7", "Wolves or raiders: everyone locks in"], ["1.8", "After the evening bell, as they wish"]] };
+const EDITED_15 = "A stranger: every adult greets them";
+let hotRule = "";
+async function loadCharter() { if (!CHARTER.base) { CHARTER.base = (await (await fetch("laws/charter.md")).text()).trim(); if (!CHARTER.base.includes(RULE_OLD)) console.warn("charter rule 1.5 not found"); } return CHARTER.base; }
+function lawCard() {
+  const on = !!world.law, c = CHARTER;
+  $("law").classList.toggle("on", on); $("lawWho").textContent = c.reading ? "Reading the charter…" : on ? "Charter in force" : "Law";
+  $("lawTtl").textContent = on || c.reading ? c.title : "No charter";
+  $("lawMeta").textContent = on ? `${c.words.toLocaleString()} words · ${c.tokens.toLocaleString()} tokens · ${c.held ? "already read" : `read once in ${(c.readMs / 1000).toFixed(1)} s`}` : c.reading ? "" : "Villagers follow their own judgement.";
+  $("lawArts").innerHTML = on ? c.rules.map(([n, t]) => `<div class="rule${n === hotRule ? " hot" : ""}${n === "1.5" && c.edited ? " edited" : ""}"><b>${n}</b><span>${n === "1.5" && c.edited ? EDITED_15 + " (edited)" : t}</span></div>`).join("") + `<div class="more">…and 22 more titles on guilds, fees and fines.</div>` : "";
+  for (const b of $("lawBtns").children) b.classList.toggle("sel", b.dataset.law === (on ? (c.edited ? "edit" : "charter") : ""));
+}
+// name: "" (no charter), "charter" (as written) or "edit" (rule 1.5 rewritten)
+async function enact(name) {
+  if (name) {
+    const base = await loadCharter(), text = (name === "edit" ? base.replace(RULE_OLD, RULE_NEW) : base) + CHARTER.edition;
+    if (text !== CHARTER.sent) {                     // new text is a new pack: send it, and time how long the model takes to read it
+      CHARTER.reading = true; lawCard(); readingNow = true; reads++;
+      const t0 = performance.now();
+      const r = await fetch("/v1/knowledge/charter", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) }).finally(() => { readingNow = false; CHARTER.reading = false; });
+      if (!r.ok) { console.warn(await r.text()); lawCard(); return; }
+      const j = await r.json(); Object.assign(CHARTER, { sent: text, tokens: j.pack_tokens, words: text.split(/\s+/).length, readMs: performance.now() - t0, held: j.pack === "held" });
+    }
+    CHARTER.edited = name === "edit";
+  }
+  world.law = name ? "charter" : null; epoch++; tally = {}; heard = 0; counting = true; world.changed = "law";
+  for (const v of villagers) v.dirty = true;
+  lawCard();
+}
+// The charter as a page: its real text, with the rules of conduct marked.
+async function openBook() {
+  const text = await loadCharter(), esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  $("bookIn").innerHTML = text.split("\n").filter(Boolean).map((line) => line.startsWith("# ") ? `<h1>${esc(line.slice(2))}</h1>` : line.startsWith("## ") ? `<h2>${esc(line.slice(3))}</h2>`
+    : `<p${/^Article 1\./.test(line) ? ` class="rule" data-rule="${line.slice(8, 11)}"` : ""}>${esc(line).replace(/^(Article [\d.]+)/, "<b>$1</b>")}</p>`).join("");
+  $("bookIn").scrollTop = 0; $("bookNote").textContent = ""; $("bookFill").style.width = "0"; $("bookCount").textContent = `${text.split(/\s+/).length.toLocaleString()} words`;
+  $("book").classList.remove("hide"); document.body.classList.add("booking");
+}
+function closeBook() { $("book").classList.add("hide"); document.body.classList.remove("booking"); }
+function scrollBook(seconds) {                       // run through the whole charter, start to end
+  const el = $("bookIn"), words = CHARTER.base.split(/\s+/).length, t0 = performance.now();
+  return new Promise((done) => { (function tick(now) {
+    const u = Math.min(1, (now - t0) / (seconds * 1000)), e = u * u * (3 - 2 * u);
+    el.scrollTop = e * (el.scrollHeight - el.clientHeight); $("bookCount").textContent = `word ${Math.round(Math.max(e, el.clientHeight / el.scrollHeight) * words).toLocaleString()} of ${words.toLocaleString()}`;
+    if (u < 1) requestAnimationFrame(tick); else done();
+  })(t0); });
+}
+async function score(body) {
+  const r = await fetch("/v1/systemone", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  return r.json();
+}
+function nextBatch() {
+  const now = performance.now(), free = villagers.filter((v) => !v.inflight);
+  // While the camera is close, the household and whoever is near the hero decide more often.
+  const near = (v) => Math.hypot(v.x - hero.x, v.z - hero.z);
+  // The household finishes what it started (a meal, a talk) before it is asked again; a sleeper is asked sooner.
+  const due = (v) => !v.arrived ? now - v.decidedAt > 9000 : now - v.decidedAt > 4200 && (v.action === "sleep" || now - v.arrivedAt > 11000);
+  const home = closeUp ? free.filter((v) => v.fam && due(v)) : [];
+  if (home.length) return home;                      // the household gets a pass of its own
+  if (closeUp && !villageUp) { if (hero.probs && !HOME_ONLY.has(hero.action)) villageUp = true; else return []; }
+  const first = closeUp ? free.filter((v) => !v.fam && !v.hidden && near(v) < 16 && now - v.decidedAt > 6000) : [];
+  if (closeUp) for (let k = free.length - 1; k >= 0; k--) if (free[k].fam) free.splice(k, 1);   // the household is asked only on its own passes
+  const from = closeUp ? hero : PLACES[world.place] || { x: 0, z: 0 }, far = (v) => Math.hypot(v.x - from.x, v.z - from.z);   // her neighbours wake first
+  const dirty = free.filter((v) => v.dirty && !first.includes(v)).sort((a, b) => far(a) - far(b));
+  const rest = free.filter((v) => !v.dirty && !first.includes(v)).sort((a, b) => a.decidedAt - b.decidedAt);
+  const names = new Set(), batch = [];               // a question names its villager, so names are unique within a pass
+  for (const v of [...first, ...dirty, ...rest]) { if (names.has(v.name)) continue; names.add(v.name); batch.push(v); if (batch.length === K) break; }
+  return batch;
+}
+async function pump() {
+  if (busy) return;
+  const batch = nextBatch(); if (!batch.length) return;
+  busy = true;
+  const mine = epoch, questions = {}, t0 = performance.now(), anyFam = batch.some((v) => v.fam);
+  for (const v of batch) { v.inflight = true; v.asked = describe(v); questions[v.id] = { type: "choice", instructions: v.name, criteria: v.fam ? HOME_CRITERIA : CRITERIA }; }
+  try {
+    const body = { model: "sparkscore-d3", state: stateText(batch.map((v) => v.asked), anyFam ? HOME_KEYS : KEYS), questions };
+    if (world.law) body.knowledge_name = "charter";
+    const readsAtStart = readingNow ? -1 : reads;
+    const j = await score(body);
+    $("down").style.display = "none";
+    const ms = performance.now() - t0;
+    msEach = msEach ? msEach * 0.7 + (ms / batch.length) * 0.3 : ms / batch.length;
+    if (batch.length === K && !readingNow && reads === readsAtStart) { const k = body.knowledge_name ? "law" : "none"; msBy[k] = msBy[k] ? msBy[k] * 0.8 + (ms / K) * 0.2 : ms / K; }
+    // The pass answers everyone at once; show the answers one by one over the time the next pass takes.
+    batch.forEach((v, n) => setTimeout(() => {
+      v.inflight = false;
+      const a = j.answers[v.id]; if (!a) return;
+      v.probs = a.probabilities;
+      // Everyone's move is sampled from the probabilities, except the household while the camera is on it: it takes the top choice.
+      let roll = v.fam && closeUp ? -1 : Math.random(), choice = a.choice;
+      for (const k of Object.keys(a.probabilities)) { if (roll < 0) break; roll -= a.probabilities[k]; if (roll <= 0) { choice = k; break; } }
+      plan(v, choice);
+      v.decidedAt = v.shown = performance.now(); if (mine === epoch) v.dirty = false;
+      total++; stamps.push(v.decidedAt);
+      if (mine === epoch && counting) {             // each villager counts once, by their latest choice
+        if (v.toldAt === epoch) tally[v.toldAs]--; else heard++;
+        v.toldAt = epoch; v.toldAs = choice; tally[choice] = (tally[choice] || 0) + 1;
+      }
+    }, v.fam ? 0 : n * ms / batch.length));
+  } catch (error) {
+    console.warn(error); $("down").style.display = "block";
+    await new Promise((r) => setTimeout(r, 1000));
+    for (const v of batch) v.inflight = false;
+  } finally { busy = false; }
+}
+setInterval(pump, 25);
+
+async function announce(text, place) {
+  world.news = text; world.place = place || null; epoch++; tally = {}; heard = 0; counting = true; world.changed = "news";
+  $("toldWhat").textContent = text ? `“${text}”` : ""; $("told").classList.toggle("hide", !text);
+  for (const v of villagers) v.dirty = true;
+  if (text && !place) {                        // ask the model where the news is happening
+    try {
+      const criteria = Object.fromEntries(Object.keys(PLACES).map((k) => [k, null])); criteria.nowhere = "nowhere in particular, or everywhere";
+      const j = await score({ model: "sparkscore-d3", state: stateText(), questions: { where: { type: "choice", instructions: "Where in the village is the town crier's news happening?", criteria } } });
+      const where = j.answers.where.choice;
+      if (world.news === text && PLACES[where]) { world.place = where; for (const v of villagers) if (v.action === "look" || v.action === "help") plan(v, v.action); }
+    } catch (error) { console.warn(error); }
+  }
+}
+
+// ======================================================================= simulate
+let pace = 1;                                         // walking speed multiplier
+let simSpeed = 2.2;                                   // simulated minutes per real second
+function step(dt) {
+  const dtm = dt * simSpeed;
+  world.minute += dtm; if (world.minute >= 1440) { world.minute -= 1440; world.day++; }
+  for (const v of villagers) {
+    v.hunger = clamp(v.hunger + 0.11 * dtm); v.lonely = clamp(v.lonely + 0.06 * dtm); v.energy = clamp(v.energy - 0.07 * dtm);
+    let moving = false;
+    if (v.path.length) {
+      const t = v.path[0], dx = t.x - v.x, dz = t.z - v.z, d = Math.hypot(dx, dz);
+      const sp = pace * v.speed * (v.action === "flee" || v.action === "help" ? 1.6 : 1) * (v.fam && inHouse(v.x, v.z) ? 0.55 : 1);
+      // Someone already standing on the spot: next to them is close enough.
+      if (d < 0.25 || (v.bumped && !v.fam && v.path.length === 1 && d < 1.5)) v.path.shift();
+      else {
+        const s = Math.min(d, sp * dt); v.x += dx / d * s; v.z += dz / d * s; moving = true;
+        const want = Math.atan2(dx, dz); let da = want - v.rot; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+        v.rot += da * Math.min(1, dt * 10); v.phase += s * 2.6;
+        // Walk around buildings, not through them.
+        const indoors = v.fam && inHouse(v.x, v.z), pad = indoors ? 0.3 : 0.55, end = v.path[v.path.length - 1];
+        if (indoors && v.path.length === 1 && !inHouse(end.x, end.z)) v.path.unshift(doorIn, doorOut);   // the only way out is the door
+        const atDoor = v.fam && Math.abs(v.x - doorIn.x) < 0.8 && v.z < doorOut.z + 0.3;
+        for (const b of indoors ? FURNITURE : solids) {
+          if (b.hero && atDoor) continue;
+          if (Math.abs(end.x - b.x) < b.hw + pad && Math.abs(end.z - b.z) < b.hd + pad) continue;   // going to this bed
+          const px = b.hw + pad - Math.abs(v.x - b.x), pz = b.hd + pad - Math.abs(v.z - b.z);
+          if (px <= 0 || pz <= 0) continue;
+          const side = v.i % 2 ? 1 : -1;
+          if (px < pz) { v.x += Math.sign(v.x - b.x || side) * px; v.z += Math.sign(Math.abs(dz) > 0.6 ? dz : side) * sp * dt; }
+          else { v.z += Math.sign(v.z - b.z || side) * pz; v.x += Math.sign(Math.abs(dx) > 0.6 ? dx : side) * sp * dt; }
+        }
+        const lake = PLACES.lake, ld = Math.hypot(v.x - lake.x, v.z - lake.z);
+        if (ld < lake.r + 0.5) { v.x = lake.x + (v.x - lake.x) / ld * (lake.r + 0.5); v.z = lake.z + (v.z - lake.z) / ld * (lake.r + 0.5); }
+      }
+    }
+    v.swing += ((moving ? 1 : 0) - v.swing) * Math.min(1, dt * 8);
+    if (!v.path.length && !v.arrived) {
+      v.arrived = true; v.arrivedAt = performance.now();
+      if (v.action === "sleep" || v.action === "hide") { if (v.fam) v.lying = v.action === "sleep"; else v.hidden = true; }
+    }
+    if (!v.arrived) continue;
+    switch (v.action) {
+      case "work": v.energy = clamp(v.energy - 0.03 * dtm); v.purse += dtm / 60; if (v.purse >= 1) { v.coins += 1; v.purse -= 1; } break;
+      case "eat": if (!v.paid) { v.coins = Math.max(0, v.coins - 2); v.paid = true; } v.hunger = clamp(v.hunger - 2.6 * dtm); v.lonely = clamp(v.lonely - 0.5 * dtm); break;
+      case "breakfast": v.hunger = clamp(v.hunger - 2.6 * dtm); v.lonely = clamp(v.lonely - 0.6 * dtm); break;
+      case "sleep": v.energy = clamp(v.energy + 0.29 * dtm); break;
+      case "chat": case "party": case "talk": v.lonely = clamp(v.lonely - 1.0 * dtm); break;
+    }
+  }
+  separate();
+}
+// Villagers don't walk through each other: overlapping pairs are pushed apart, and walkers step around.
+const cells = new Map();
+function separate() {
+  cells.clear();
+  for (const v of villagers) {
+    v.bumped = false; if (v.hidden || v.lying) continue;
+    const key = Math.floor(v.x / 1.2) * 4096 + Math.floor(v.z / 1.2);
+    let c = cells.get(key); if (!c) cells.set(key, c = []); c.push(v);
+  }
+  const seated = (v) => v.arrived && v.action === "breakfast";
+  for (const [key, list] of cells) for (const a of list) for (const off of [0, 1, 4095, 4096, 4097]) {
+    const other = off ? cells.get(key + off) : list; if (!other) continue;
+    for (const b of other) {
+      if (a === b || (!off && a.i >= b.i)) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, r = 0.37 * (a.size + b.size), d2 = dx * dx + dz * dz;
+      if (d2 >= r * r) continue;
+      const d = Math.sqrt(d2) || 0.01, nx = d2 ? dx / d : 1, nz = d2 ? dz / d : 0, over = r - d;
+      // A walker gives way less than someone standing; someone sitting doesn't move at all.
+      let wa = seated(a) ? 0 : a.path.length ? 0.35 : 1, wb = seated(b) ? 0 : b.path.length ? 0.35 : 1; const sum = wa + wb; if (!sum) continue; wa /= sum; wb /= sum;
+      const ta = a.path.length ? 0.6 : 0, tb = b.path.length ? 0.6 : 0;      // walkers sidestep to their right
+      a.x -= (nx * wa - nz * ta * wa) * over; a.z -= (nz * wa + nx * ta * wa) * over;
+      b.x += (nx * wb - nz * tb * wb) * over; b.z += (nz * wb + nx * tb * wb) * over;
+      a.bumped = b.bumped = true;
+    }
+  }
+  // The household stays inside its walls except at the door.
+  for (const v of villagers) if (v.fam && inHouse(v.x, v.z)) {
+    v.x = Math.max(H.x - H.w / 2 + 0.45, Math.min(H.x + H.w / 2 - 0.45, v.x)); v.z = Math.max(H.z - H.d / 2 + 0.45, v.z);
+    if (Math.abs(v.x - doorIn.x) > 0.5) v.z = Math.min(H.z + H.d / 2 - 0.45, v.z);
+  }
+}
+
+// ========================================================================== render
+const renderer = new THREE.WebGLRenderer({ canvas: $("c"), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x9fd3f5, 140, 520);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.3, 900);
+const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x5a7a4a, 1.0); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.2); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+scene.add(sun, sun.target);
+const lamp = new THREE.PointLight(0xffc98a, 0, 14, 1.6); lamp.position.set(H.x + 1.5, 2.6, H.z + 0.8); scene.add(lamp);
+
+const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
+const box = (w, h, d, color, x, y, z, parent = scene, cast = true) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color)); m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = true; parent.add(m); return m; };
+function roof(w, d, h, color, x, y, z, parent = scene) {
+  const g = new THREE.ConeGeometry(Math.SQRT1_2, 1, 4); g.rotateY(Math.PI / 4);
+  const m = new THREE.Mesh(g, mat(color)); m.scale.set(w, h, d); m.position.set(x, y + h / 2, z); m.castShadow = true; parent.add(m); return m;
+}
+// ground, roads, square
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), mat(0x78b35a)); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const roadMat = mat(0xd9c79a);
+for (const [k, p] of Object.entries(PLACES)) {
+  if (k === "square") continue;
+  const len = Math.hypot(p.x, p.z), r = new THREE.Mesh(new THREE.PlaneGeometry(2.6, len), roadMat);
+  r.rotation.x = -Math.PI / 2; r.rotation.z = -Math.atan2(p.x, p.z) + Math.PI; r.position.set(p.x / 2, 0.03, p.z / 2); r.receiveShadow = true; scene.add(r);
+}
+{ const s = new THREE.Mesh(new THREE.CircleGeometry(11, 40), mat(0xcfc5b0)); s.rotation.x = -Math.PI / 2; s.position.y = 0.05; s.receiveShadow = true; scene.add(s);
+  const f = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.1, 0.7, 20), mat(0xa9a59a)); f.position.y = 0.35; f.castShadow = true; scene.add(f);
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.1, 20), mat(0x58b6e8)); w.position.y = 0.72; scene.add(w);
+  box(0.4, 1.6, 0.4, 0xa9a59a, 0, 1.2, 0); }
+// homes
+const windowGlow = new THREE.MeshBasicMaterial({ color: 0xffd98a });
+const WALLS = [0xf2e3c6, 0xe8d2b0, 0xf5ead8, 0xdcc7a2, 0xefd9c0], ROOFS = [0xb5482f, 0x9c3d2a, 0x7f5a3c, 0x6b7f8f, 0xa8553a];
+const winGeo = new THREE.PlaneGeometry(0.8, 0.8), windows = [];
+for (const h of homes) {
+  box(h.hw * 2, 2.6, h.hd * 2, pick(WALLS), h.x, 1.3, h.z); roof(h.hw * 2 + 0.7, h.hd * 2 + 0.7, 2.1, pick(ROOFS), h.x, 2.6, h.z);
+  box(0.9, 1.6, 0.12, 0x6b4a2f, h.x, 0.8, h.z + h.hd + 0.02, scene, false);
+  for (const sx of [-1.3, 1.3]) { const w = new THREE.Mesh(winGeo, windowGlow); w.position.set(h.x + sx, 1.6, h.z + h.hd + 0.03); scene.add(w); windows.push(w); }
+}
+// the opening house: floor, cut-away walls, beds, table
+{ const g = new THREE.Group(); g.position.set(H.x, 0, H.z); scene.add(g);
+  box(H.w, 0.12, H.d, 0xb98a5a, 0, 0.06, 0, g, false);
+  const wall = 0xf2e3c6, hi = 2.5, lo = 0.55, t = 0.25;
+  box(H.w, hi, t, wall, 0, hi / 2, -H.d / 2, g); box(t, hi, H.d, wall, -H.w / 2, hi / 2, 0, g);
+  box(t, lo, H.d, wall, H.w / 2, lo / 2, 0, g);
+  const left = H.w / 2 + DOOR_X - 0.8, right = H.w / 2 - DOOR_X - 0.8;
+  box(left, lo, t, wall, -H.w / 2 + left / 2, lo / 2, H.d / 2, g); box(right, lo, t, wall, H.w / 2 - right / 2, lo / 2, H.d / 2, g);
+  box(0.26, 2.6, 0.36, 0x6b4a2f, DOOR_X - 0.9, 1.3, H.d / 2, g); box(0.26, 2.6, 0.36, 0x6b4a2f, DOOR_X + 0.9, 1.3, H.d / 2, g); box(2.3, 0.24, 0.4, 0x6b4a2f, DOOR_X, 2.7, H.d / 2, g);
+  const quilts = [0xc94f4f, 0xc94f4f, 0x4f8fc9, 0x7a9a5a];
+  for (const [bx, who] of BEDS) { box(1.25, 0.4, 2.4, 0x8a5a36, bx, 0.3, -H.d / 2 + 1.5, g); box(1.15, 0.16, 1.5, quilts[who], bx, 0.56, -H.d / 2 + 1.9, g, false); box(0.8, 0.14, 0.5, 0xf5f0e6, bx, 0.57, -H.d / 2 + 0.6, g, false); }
+  box(1.7, 0.12, 1.1, 0x9a6a3e, 2.6, 0.95, 1.55, g); for (const [lx, lz] of [[-0.7, -0.4], [0.7, -0.4], [-0.7, 0.4], [0.7, 0.4]]) box(0.12, 0.9, 0.12, 0x7a5230, 2.6 + lx, 0.45, 1.55 + lz, g, false);
+  for (const [sx, sz] of [[-0.45, 0], [0.45, 0], [0, -0.3], [0, 0.3]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.11, 0.1, 12), mat(0xf5f0e6)); b.position.set(2.6 + sx, 1.06, 1.55 + sz); g.add(b); }
+  box(2.6, 0.03, 1.8, 0xb5482f, -2.4, 0.135, 1.3, g, false);
+  box(1.1, 1.3, 0.7, 0x7a5230, 4.6, 0.65, -H.d / 2 + 0.6, g); box(0.5, 0.5, 0.5, 0x3a3a3a, -4.6, 0.3, 2.9, g); }
+// landmarks
+{ const p = PLACES.tavern; box(p.hw * 2, 4.2, p.hd * 2, 0xd9a066, p.x, 2.1, p.z); roof(p.hw * 2 + 1, p.hd * 2 + 1, 3, 0x7f3b2a, p.x, 4.2, p.z); box(1.4, 2, 0.14, 0x5a3a22, p.x, 1, p.z + p.hd + 0.03, scene, false);
+  for (const sx of [-3, 3]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.1), windowGlow); w.position.set(p.x + sx, 2.2, p.z + p.hd + 0.03); scene.add(w); windows.push(w); } }
+{ const p = PLACES.chapel; box(p.hw * 2, 5, p.hd * 2, 0xe9e4da, p.x, 2.5, p.z); roof(p.hw * 2 + 0.8, p.hd * 2 + 0.8, 3.4, 0x5a6478, p.x, 5, p.z); box(2.6, 9, 2.6, 0xe9e4da, p.x, 4.5, p.z + p.hd - 1); roof(3.2, 3.2, 4, 0x5a6478, p.x, 9, p.z + p.hd - 1); }
+{ const p = PLACES.mill; const body = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.6, 8, 10), mat(0xe6dcc8)); body.position.set(p.x, 4, p.z); body.castShadow = true; scene.add(body); roof(6.2, 6.2, 2.8, 0x8a5a36, p.x, 8, p.z);
+  var blades = new THREE.Group(); blades.position.set(p.x, 7, p.z + 3.3); scene.add(blades);
+  for (let k = 0; k < 4; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.9, 6, 0.1), mat(0xf5f0e6)); b.position.y = 3; const arm = new THREE.Group(); arm.rotation.z = k * Math.PI / 2; arm.add(b); b.castShadow = true; blades.add(arm); } }
+{ const p = PLACES.forge; box(p.hw * 2, 3.4, p.hd * 2, 0x8a8f99, p.x, 1.7, p.z); roof(p.hw * 2 + 0.8, p.hd * 2 + 0.8, 2, 0x3f4350, p.x, 3.4, p.z); box(1, 5.4, 1, 0x5a5f6b, p.x + 2.2, 2.7, p.z - 1.4); }
+{ const p = PLACES.bakery; box(p.hw * 2, 3.4, p.hd * 2, 0xf5d9a8, p.x, 1.7, p.z); roof(p.hw * 2 + 0.8, p.hd * 2 + 0.8, 2.2, 0xc9792d, p.x, 3.4, p.z); box(0.9, 4.8, 0.9, 0xb5a08a, p.x - 2.4, 2.4, p.z - 1.6); }
+{ const p = PLACES.school; box(p.hw * 2, 3.6, p.hd * 2, 0xc9574a, p.x, 1.8, p.z); roof(p.hw * 2 + 0.8, p.hd * 2 + 0.8, 2.2, 0x4a4a55, p.x, 3.6, p.z); box(1, 1.2, 1, 0xf5f0e6, p.x, 6.2, p.z); }
+{ const p = PLACES.market, cols = [0xe8553d, 0x3b8fb8, 0xf0c33c, 0x6a9a3b, 0xa8459a, 0xff9d5c];
+  for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2, x = p.x + Math.cos(a) * 5, z = p.z + Math.sin(a) * 5; box(2.4, 0.9, 1.5, 0x9a6a3e, x, 0.45, z); const c = roof(3, 2.1, 1, cols[k], x, 2.2, z);
+    for (const [px, pz] of [[-1.1, -0.6], [1.1, -0.6], [-1.1, 0.6], [1.1, 0.6]]) box(0.1, 2.2, 0.1, 0x7a5230, x + px, 1.1, z + pz, scene, false); } }
+{ const p = PLACES.gate; for (const sx of [-4, 4]) { box(3, 7, 3, 0xa9a59a, p.x + sx, 3.5, p.z + 3); roof(3.6, 3.6, 2.4, 0x7f3b2a, p.x + sx, 7, p.z + 3); } box(5, 1.6, 1.6, 0xa9a59a, p.x, 5.6, p.z + 3);
+  for (let k = -9; k <= 9; k++) if (Math.abs(k) > 1) box(5.2, 3, 1, 0xb5b0a4, p.x + k * 5.2 + Math.sign(k) * 0.9, 1.5, p.z + 3); }
+{ const p = PLACES.farm, cols = [0xd9b84a, 0x8fbf4f, 0xc9a23a, 0x7fae45];
+  for (let k = 0; k < 6; k++) { const f = new THREE.Mesh(new THREE.PlaneGeometry(22, 2.9), mat(cols[k % 4])); f.rotation.x = -Math.PI / 2; f.position.set(p.x, 0.04, p.z - 8.2 + k * 3.3); f.receiveShadow = true; scene.add(f); }
+  box(5, 3.6, 4, 0xb5482f, p.x - 14, 1.8, p.z - 4); roof(5.8, 4.8, 2.4, 0x5a3a22, p.x - 14, 3.6, p.z - 4); }
+{ const p = PLACES.lake; const l = new THREE.Mesh(new THREE.CircleGeometry(p.r, 48), new THREE.MeshLambertMaterial({ color: 0x3f9fe0 })); l.rotation.x = -Math.PI / 2; l.position.set(p.x, 0.06, p.z); scene.add(l);
+  const s = new THREE.Mesh(new THREE.RingGeometry(p.r, p.r + 1.2, 48), mat(0xe6d9a8)); s.rotation.x = -Math.PI / 2; s.position.set(p.x, 0.05, p.z); scene.add(s);
+  box(1.4, 0.2, 5, 0x8a5a36, p.x - p.r + 1, 0.3, p.z + 2); }
+// trees
+{ const spots = []; const p = PLACES.forest;
+  for (let k = 0; k < 150; k++) { const a = rnd(0, 6.283), r = Math.sqrt(Math.random()) * (p.r + 8); spots.push([p.x + Math.cos(a) * r - 4, p.z + Math.sin(a) * r - 3, rnd(0.8, 1.5)]); }
+  for (let k = 0; k < 130; k++) { const a = rnd(0, 6.283), r = rnd(92, 170); spots.push([Math.cos(a) * r * 1.15, Math.sin(a) * r * 0.95, rnd(0.9, 1.9)]); }
+  for (let k = 0; k < 40; k++) { const x = rnd(-70, 70), z = rnd(-52, 56); if (solids.some((b) => Math.abs(x - b.x) < b.hw + 2.5 && Math.abs(z - b.z) < b.hd + 2.5) || Math.hypot(x, z) < 14 || Math.hypot(x - 58, z + 36) < 19 || (Math.abs(x + 55) < 13 && Math.abs(z - 30) < 11)) continue; spots.push([x, z, rnd(0.6, 1)]); }
+  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.3, 1.4, 6), mat(0x6b4a2f), spots.length), leaves = new THREE.InstancedMesh(new THREE.ConeGeometry(1.5, 3.6, 7), mat(0xffffff), spots.length);
+  const m = new THREE.Matrix4(), c = new THREE.Color();
+  spots.forEach(([x, z, s], k) => { m.makeScale(s, s, s).setPosition(x, 0.7 * s, z); trunks.setMatrixAt(k, m); m.makeScale(s, s, s).setPosition(x, 3.0 * s, z); leaves.setMatrixAt(k, m); leaves.setColorAt(k, c.setHSL(rnd(0.27, 0.36), rnd(0.42, 0.6), rnd(0.26, 0.4))); });
+  trunks.castShadow = leaves.castShadow = true; scene.add(trunks, leaves); }
+// place names, shown from above
+const labels = [];
+for (const p of Object.values(PLACES)) {
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 128; const cx = cv.getContext("2d");
+  cx.font = "600 64px 'Space Grotesk', sans-serif"; cx.textAlign = "center"; cx.textBaseline = "middle"; cx.shadowColor = "rgba(0,0,0,0.7)"; cx.shadowBlur = 14; cx.fillStyle = "#fff"; cx.fillText(p.label.toUpperCase(), 256, 64);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false, opacity: 0 })); s.scale.set(18, 4.5, 1); s.position.set(p.x, 13, p.z); s.renderOrder = 5; scene.add(s); labels.push(s);
+}
+// where the news is
+const beacon = new THREE.Group(); scene.add(beacon); beacon.visible = false;
+{ const col = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xff5fd2, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })); col.position.y = 30; beacon.add(col);
+  const rg = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), new THREE.MeshBasicMaterial({ color: 0xff5fd2, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); rg.rotation.x = -Math.PI / 2; rg.position.y = 0.12; beacon.add(rg); beacon.ring = rg; }
+
+// ---- villagers: block figures, one instanced mesh per body part
+const PARTS = [
+  { g: new THREE.BoxGeometry(0.25, 0.74, 0.27).translate(0, -0.37, 0), pivot: [-0.15, 0.74, 0], swing: 1, tint: "pants" },
+  { g: new THREE.BoxGeometry(0.25, 0.74, 0.27).translate(0, -0.37, 0), pivot: [0.15, 0.74, 0], swing: -1, tint: "pants" },
+  { g: new THREE.BoxGeometry(0.6, 0.72, 0.36), pivot: [0, 1.1, 0], swing: 0, tint: "shirt" },
+  { g: new THREE.BoxGeometry(0.2, 0.66, 0.24).translate(0, -0.3, 0), pivot: [-0.41, 1.42, 0], swing: -1, tint: "shirt" },
+  { g: new THREE.BoxGeometry(0.2, 0.66, 0.24).translate(0, -0.3, 0), pivot: [0.41, 1.42, 0], swing: 1, tint: "shirt" },
+  { g: new THREE.BoxGeometry(0.46, 0.46, 0.46), pivot: [0, 1.7, 0], swing: 0, tint: "skin" },
+  { g: new THREE.BoxGeometry(0.46, 0.15, 0.46), pivot: [0, 2.005, 0], swing: 0, tint: "hair" },
+  { g: new THREE.BoxGeometry(0.075, 0.085, 0.03), pivot: [-0.1, 1.74, 0.235], swing: 0, tint: "eye" },
+  { g: new THREE.BoxGeometry(0.075, 0.085, 0.03), pivot: [0.1, 1.74, 0.235], swing: 0, tint: "eye" },
+];
+const tmpC = new THREE.Color();
+for (const v of villagers) v.eye = 0x1c1c26;
+for (const p of PARTS) {
+  p.mesh = new THREE.InstancedMesh(p.g, mat(0xffffff), N); p.mesh.castShadow = true; p.mesh.receiveShadow = false; p.mesh.frustumCulled = false; scene.add(p.mesh);
+  villagers.forEach((v, k) => p.mesh.setColorAt(k, tmpC.set(v[p.tint])));
+}
+const torso = PARTS[2].mesh;
+const discs = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false }), N);
+discs.frustumCulled = false; scene.add(discs);
+// thought bubbles
+const bubbleMat = {};
+for (const [k, a] of Object.entries(ACTIONS)) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 128; const cx = cv.getContext("2d");
+  cx.fillStyle = "rgba(255,255,255,0.96)"; cx.beginPath(); cx.arc(64, 60, 52, 0, 6.283); cx.fill(); cx.beginPath(); cx.moveTo(48, 104); cx.lineTo(64, 126); cx.lineTo(80, 104); cx.fill();
+  cx.lineWidth = 7; cx.strokeStyle = "#" + new THREE.Color(a.color).getHexString(); cx.beginPath(); cx.arc(64, 60, 48, 0, 6.283); cx.stroke();
+  cx.font = "58px 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif"; cx.textAlign = "center"; cx.textBaseline = "middle"; cx.fillText(a.icon, 64, 64);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  bubbleMat[k] = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+}
+for (const v of villagers) { v.bubble = new THREE.Sprite(bubbleMat.sleep); v.bubble.visible = false; v.bubble.center.set(0.5, 0); scene.add(v.bubble); }
+
+// The villager being followed: a name tag that keeps its size on screen, and a ring on the ground.
+const tagCv = document.createElement("canvas"); tagCv.width = 384; tagCv.height = 160;
+const tagTex = new THREE.CanvasTexture(tagCv); tagTex.colorSpace = THREE.SRGBColorSpace;
+const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false, sizeAttenuation: false })); tag.center.set(0.5, 0); tag.scale.set(0.132, 0.055, 1); tag.renderOrder = 6; scene.add(tag);
+const tagRing = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, depthWrite: false })); tagRing.renderOrder = 4; scene.add(tagRing);
+let tagName = "";
+function drawTag(v, now, top) {
+  if (v.name !== tagName) {
+    tagName = v.name; const cx = tagCv.getContext("2d"); cx.clearRect(0, 0, 384, 160);
+    cx.fillStyle = "#ffd23f"; cx.beginPath(); cx.roundRect(42, 8, 300, 96, 48); cx.fill(); cx.beginPath(); cx.moveTo(162, 100); cx.lineTo(192, 150); cx.lineTo(222, 100); cx.fill();
+    cx.fillStyle = "#1a1408"; cx.font = "700 60px 'Space Grotesk', sans-serif"; cx.textAlign = "center"; cx.textBaseline = "middle"; cx.fillText(v.name.toUpperCase(), 192, 58);
+    tagTex.needsUpdate = true;
+  }
+  tag.visible = tagRing.visible = !v.hidden;
+  tag.position.set(v.x, top + 0.12 + Math.abs(Math.sin(now / 320)) * 0.12, v.lying ? v.z - 1.2 : v.z);
+  const pulse = 1 + 0.12 * Math.sin(now / 260); tagRing.scale.set(pulse, 1, pulse); tagRing.position.set(v.x, (inHouse(v.x, v.z) ? 0.12 : 0) + 0.11, v.z); tagRing.visible = tag.visible && !v.lying;
+}
+const root = new THREE.Matrix4(), part = new THREE.Matrix4(), out = new THREE.Matrix4(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+const qY = new THREE.Quaternion(), qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2), q = new THREE.Quaternion();
+const yAxis = new THREE.Vector3(0, 1, 0), vp = new THREE.Vector3(), vs = new THREE.Vector3();
+function drawVillagers(now, camHeight) {
+  const high = smooth((camHeight - 30) / 80), bubbleSize = 0.95 + high * 1.9, linger = 4.5 - high * 2.6;
+  villagers.forEach((v, k) => {
+    if (v.hidden) { for (const p of PARTS) p.mesh.setMatrixAt(k, zero); discs.setMatrixAt(k, zero); v.bubble.visible = false; return; }
+    const sitting = v.arrived && v.action === "breakfast";
+    if (v.lying) { q.copy(qX); vp.set(v.x, 0.72, v.z); }
+    else { q.copy(qY.setFromAxisAngle(yAxis, v.rot)); vp.set(v.x, (inHouse(v.x, v.z) ? 0.12 : 0) + Math.abs(Math.sin(v.phase)) * 0.05 * v.swing - (sitting ? 0.25 : 0), v.z); }
+    root.compose(vp, q, vs.setScalar(v.size));
+    const a = Math.sin(v.phase) * 0.75 * v.swing;
+    for (const p of PARTS) { part.makeRotationX(p.swing * a).setPosition(p.pivot[0], p.pivot[1], p.pivot[2]); p.mesh.setMatrixAt(k, out.multiplyMatrices(root, part)); }
+    out.makeScale(0.95 + high * 0.9, 1, 0.95 + high * 0.9).setPosition(v.x, 0.09, v.z); discs.setMatrixAt(k, v.lying || inHouse(v.x, v.z) ? zero : out); discs.setColorAt(k, tmpC.set(ACTIONS[v.action].color));
+    const age = (now - v.shown) / 1000, keep = v === focus ? 1e9 : linger;
+    if (age < keep && v.probs) {
+      const pop = Math.min(1, age * 5) * (age > keep - 0.4 ? (keep - age) / 0.4 : 1) * bubbleSize;
+      v.bubble.material = bubbleMat[v.action]; v.bubble.visible = true; v.bubble.scale.set(pop, pop, 1);
+      v.bubble.position.set(v.x, v.lying ? 1.5 : 2.25 * v.size, v.lying ? v.z - 1.2 : v.z);
+    } else v.bubble.visible = false;
+    if (DEMO === "law") tag.visible = tagRing.visible = false; else if (v === (focus || hero)) drawTag(v, now, v.bubble.visible ? v.bubble.position.y + v.bubble.scale.y : v.lying ? 1.5 : 2.15 * v.size);
+  });
+  for (const p of PARTS) p.mesh.instanceMatrix.needsUpdate = true;
+  discs.instanceMatrix.needsUpdate = true; discs.instanceColor.needsUpdate = true;
+}
+
+// ---- light follows the clock
+const C = (h) => new THREE.Color(h), SKY = { night: C(0x0b1026), dawn: C(0xf4b98c), day: C(0x9fd3f5) }, tmpSky = new THREE.Color();
+function lighting(look, dist) {
+  const h = world.minute / 60, elev = Math.sin((h - 6) / 12 * Math.PI), day = smooth((elev + 0.12) / 0.34), low = 1 - smooth(Math.abs(elev) / 0.45);
+  tmpSky.copy(SKY.night).lerp(SKY.day, day).lerp(SKY.dawn, low * day * 0.75);
+  renderer.setClearColor(tmpSky); scene.fog.color.copy(tmpSky);
+  hemi.intensity = 0.62 + 0.55 * day; sun.intensity = 0.5 + 2.0 * day; sun.color.setHex(0xfff1d6).lerp(C(0xffb070), low * 0.8);
+  const az = (h - 6) / 12 * Math.PI, e = Math.max(0.16, elev);
+  const lx = Math.round(look.x / 8) * 8, lz = Math.round(look.z / 8) * 8;      // the shadow map moves in steps, so shadows don't swim
+  sun.target.position.set(lx, 0, lz); sun.position.set(lx + Math.cos(az) * 120 * (1 - e * 0.5), 40 + e * 110, lz + 70);
+  const half = clamp(dist * 0.9, 26, 115), sc = sun.shadow.camera;
+  if (Math.abs(sc.right - half) > 2) { sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 1; sc.far = 400; sc.updateProjectionMatrix(); }
+  windowGlow.color.setHex(0x30343d).lerp(C(0xffd98a), 1 - day); lamp.intensity = 10 + (1 - day) * 30;
+}
+
+// ============================================================================ camera
+// wake: on the house. follow: behind the hero. rise: pulling back to the whole village. free: yours.
+const cam = { mode: Q.get("skip") ? "free" : "wake", t: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), heroLook: new THREE.Vector3(hero.x, 1, hero.z), from: new THREE.Vector3(), fromLook: new THREE.Vector3() };
+const TOP = { pos: new THREE.Vector3(0, 150, 96), look: new THREE.Vector3(0, 0, 6) };
+const controls = new OrbitControls(camera, renderer.domElement); controls.enabled = false; controls.maxPolarAngle = 1.45; controls.minDistance = 8; controls.maxDistance = 330; controls.enableDamping = true;
+const want = new THREE.Vector3(), wantLook = new THREE.Vector3();
+const EYES = 4.6, ALONE = 14;
+const DEMO = Q.get("demo") || "", FOLLOW_S = DEMO ? 10 : 15, RISE_S = DEMO ? 15 : 22;   // ?demo=1 plays the whole thing by itself                     // seconds: first person, then Mara alone, then the whole house
+function setMode(m) {
+  cam.mode = m; cam.t = 0; cam.from.copy(cam.pos); cam.fromLook.copy(cam.look);
+  if (m === "follow") say("So is everyone she passes.");
+  if (m === "rise") { closeUp = false; simSpeed = 4; say(`${N} villagers. Every move is a live model decision.`, 15000); $("card").classList.add("hide"); }
+  if (m === "tour") { focus = null; $("crier").classList.remove("hide"); if (DEMO === "law") setTimeout(lawDirector, 0); else { say("One DGX Spark. Tell them something.", 6000); setTimeout(director, 0); } }
+  if (m === "free" || (m === "tour" && DEMO === "law")) { $("law").classList.remove("hide"); document.body.classList.add("laws"); }
+  if (m === "free") { controls.target.copy(TOP.look); camera.position.copy(cam.pos); controls.enabled = true; focus = null; $("crier").classList.remove("hide"); say("One DGX Spark. Tell them something.", 12000); }
+}
+let captionTimer = 0;
+function say(text, ms = 0) { const c = $("caption"); c.textContent = typeof text === "function" ? text() : text; c.style.opacity = 1; clearTimeout(captionTimer); if (ms) captionTimer = setTimeout(() => { c.style.opacity = 0; }, ms); }
+function moveCamera(dt) {
+  cam.t += dt;
+  cam.heroLook.lerp(vp.set(hero.x, hero.lying ? 0.8 : 1.25, hero.z), 1 - Math.exp(-dt * 3));
+  if (cam.mode === "free") { controls.update(); cam.pos.copy(camera.position); cam.look.copy(controls.target); return; }
+  if (cam.mode === "wake") {
+    const fov = cam.t < EYES ? 62 : 42; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 2.5); camera.updateProjectionMatrix(); }
+    if (cam.t > EYES - 0.3 && !cam.blink) { cam.blink = true; document.body.classList.add("blink"); setTimeout(() => document.body.classList.remove("blink"), 420); }
+    if (cam.t < EYES) {                                // through her eyes, lying in bed
+      cam.pos.set(hero.x, 1.08, hero.z - 1.45); cam.look.set(hero.x + 2.2 + Math.sin(cam.t * 0.7) * 0.5, 0.75, hero.z + 6);
+      camera.position.copy(cam.pos); camera.lookAt(cam.look); return;
+    }
+    if (!hero.lying && !cam.upAt) cam.upAt = cam.t;
+    cam.alone = cam.t < ALONE && (!cam.upAt || cam.t - cam.upAt < 0.9);
+    if (cam.alone) { want.set(hero.x + 1.1, 4.3, hero.z - 0.95); wantLook.set(hero.x - 0.6, 0.75, hero.z - 1.0); }      // only her, from over her bed
+    else { const drift = Math.sin(cam.t * 0.12) * 1.6; want.set(H.x + 5.2 + drift, 5.6, H.z + 9.2); wantLook.copy(cam.heroLook); }
+    if (!cam.cut) { cam.cut = true; cam.pos.copy(want); cam.look.copy(wantLook); }                    // she blinks, and we are outside her
+    const out = !inHouse(hero.x, hero.z) && Math.hypot(hero.x - doorOut.x, hero.z - doorOut.z) > 9 && !HOME_ONLY.has(hero.action);   // far enough that the camera behind her is outdoors
+    if (out) setMode("follow"); else if (cam.t > 75) setMode("rise");
+  } else if (cam.mode === "follow") {
+    const back = 8.5, sx = Math.sin(hero.rot), sz = Math.cos(hero.rot);
+    want.set(hero.x - sx * back + sz * 1.6, 4.0, hero.z - sz * back - sx * 1.6); wantLook.copy(cam.heroLook);
+    if (cam.t > FOLLOW_S) setMode("rise");
+  } else if (cam.mode === "rise") {
+    const u = smooth(cam.t / RISE_S);
+    want.copy(cam.from).lerp(TOP.pos, u); wantLook.copy(cam.heroLook).lerp(TOP.look, smooth(cam.t / (RISE_S * 0.55)));
+    if (cam.t > RISE_S + 1) { cam.pos.copy(TOP.pos); cam.look.copy(TOP.look); camera.position.copy(cam.pos); setMode(DEMO ? "tour" : "free"); return; }
+  } else if (cam.mode === "tour") {                    // lean in toward wherever the news is
+    const p = cam.lean === "top" ? null : PLACES[cam.lean] || (world.news && PLACES[world.place]);
+    if (p && cam.close) { wantLook.set(p.x + cam.close[3], 0, p.z + cam.close[4]); want.set(p.x + cam.close[0], cam.close[1], p.z + cam.close[2]); }
+    else if (p) { wantLook.set(p.x * 0.72, 0, p.z * 0.72); want.set(p.x * 0.72, 74, p.z * 0.72 + 70); } else { want.copy(TOP.pos); wantLook.copy(TOP.look); }
+  }
+  const k = 1 - Math.exp(-dt * (cam.mode === "follow" ? 1.6 : cam.mode === "tour" ? 0.7 : 2.4));
+  cam.pos.lerp(want, k); cam.look.lerp(wantLook, 1 - Math.exp(-dt * (cam.mode === "tour" ? 0.7 : 3)));
+  camera.position.copy(cam.pos); camera.lookAt(cam.look);
+}
+if (cam.mode === "free") { cam.pos.copy(TOP.pos); cam.look.copy(TOP.look); camera.position.copy(TOP.pos); setMode(DEMO ? "tour" : "free"); closeUp = false; simSpeed = 4; }
+else focus = hero;
+requestAnimationFrame(() => document.body.classList.add("awake"));
+addEventListener("keydown", (e) => { if (e.target.tagName === "INPUT") return; if (e.key === "t") { cam.pos.copy(TOP.pos); setMode("free"); closeUp = false; simSpeed = 4; } if (e.key === "r") location.reload(); });
+
+// ============================================================================== panels
+const frustum = new THREE.Frustum(), pm = new THREE.Matrix4();
+let saidBeat = 0;
+function panels() {
+  const now = performance.now();
+  stamps = stamps.filter((s) => now - s < 4000);
+  pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(pm);
+  let inView = 0; for (const v of villagers) if (!v.hidden && frustum.containsPoint(vp.set(v.x, 1, v.z)) && vp.distanceTo(camera.position) < 420) inView++;
+  $("cView").textContent = inView; $("cAll").textContent = N;
+  $("cTotal").textContent = total.toLocaleString(); $("cRate").textContent = Math.round(stamps.length / 4); if (msEach) $("cMs").textContent = Math.round(msEach);
+  const counts = heard ? `<span><b>${heard}</b> of ${N} have decided what to do:</span>` + Object.keys(tally).filter((k) => tally[k] > 0).sort((a, b) => tally[b] - tally[a]).slice(0, 4).map((k) => `<span>${ACTIONS[k].icon} ${k} <b>${tally[k]}</b></span>`).join("") : "";
+  $("toldTally").innerHTML = world.changed === "news" ? counts || "<span>the village is hearing it…</span>" : "";
+  $("lawTally").innerHTML = world.changed === "law" ? counts || "<span>the village is hearing it…</span>" : ""; $("lawTally").style.display = world.changed === "law" ? "" : "none";
+  $("lawSpeed").innerHTML = msBy.none ? `per decision: <b>${Math.round(msBy.none)} ms</b> without the charter` + (msBy.law ? ` · <b>${Math.round(msBy.law)} ms</b> with it` : "") : "";
+  if (cam.mode === "wake") {
+    const beat = cam.t < 1.8 ? 0 : cam.t < EYES + 0.6 ? 1 : cam.alone || cam.t - (cam.upAt || 0) < 2.6 ? 2 : 3;
+    if (beat > saidBeat) { saidBeat = beat; say(["", "This is Mara.", "A model on one DGX Spark decides what she does next.", "Her family. Each of them is a decision too."][beat]); }
+  }
+  const v = focus;
+  if (v && v.probs && cam.mode !== "rise") {
+    const top = Object.keys(v.probs).sort((a, b) => v.probs[b] - v.probs[a]).slice(0, 3);
+    const hex = (k) => "#" + new THREE.Color(ACTIONS[k].color).getHexString();
+    $("card").classList.remove("hide");
+    $("card").innerHTML = `<div class="nm">${v.name} <span>${v.age}, ${v.role}</span></div><div class="did" style="color:${hex(v.action)}">${ACTIONS[v.action].icon} ${v.action}: ${ACTIONS[v.action].say}</div>` +
+      top.map((k) => `<div class="bar"><span>${k}</span><div class="track"><div class="fill" style="background:${hex(k)};width:${100 * v.probs[k]}%"></div></div><span class="n">${(100 * v.probs[k]).toFixed(0)}%</span></div>`).join("");
+  } else if (!v) $("card").classList.add("hide");
+}
+setInterval(panels, 250);
+
+for (const [label, text, place] of [["Fire", "Fire at the mill! Bring buckets!", "mill"], ["Dragon", "A dragon is circling over the lake!", "lake"],
+  ["Festival", "The harvest festival begins in the square: music, dancing and free cider!", "square"], ["Wolves", "Wolves have been seen at the farm!", "farm"], ["All clear", "", null]]) {
+  const b = document.createElement("button"); b.textContent = label; b.onclick = () => announce(text, place); $("crierBtns").appendChild(b);
+}
+$("crierIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.value.trim()) { announce(e.target.value.trim(), null); e.target.select(); } });
+// click a villager to see their last decision
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(); let downAt = [0, 0];
+renderer.domElement.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5 || cam.mode !== "free") return;
+  mouse.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(mouse, camera);
+  let best = null, bd = 3.5;
+  for (const v of villagers) { if (v.hidden) continue; const d = ray.ray.distanceToPoint(vp.set(v.x, 1, v.z)); if (d < bd) { bd = d; best = v; } }
+  focus = best; if (best) best.shown = performance.now();
+});
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function director() {
+  const box = $("crierIn"), bar = $("crier");
+  const beats = [["Fire at the mill! Bring buckets!", "Nobody scripted this. Every villager decides alone."],
+    ["A dragon is circling over the lake!", () => `${Math.round(msEach)} milliseconds a decision. One DGX Spark.`],
+    ["Free cider and music in the square, right now!", "Tell them anything. They work it out."]];
+  await wait(2200);
+  for (const [text, line] of beats) {
+    bar.classList.add("typing"); box.value = ""; await wait(500);
+    for (const ch of text) { box.value += ch; await wait(38 + Math.random() * 40); }
+    await wait(550); bar.classList.remove("typing"); announce(text, null);
+    await wait(7000); say(typeof line === "function" ? line() : line, 6500);
+    await wait(10500); box.value = "";
+  }
+  $("endLine").textContent = `${N} villagers · one DGX Spark · ${Math.round(msEach)} ms a decision`;
+  $("end").classList.remove("hide"); $("told").classList.add("hide"); $("caption").style.opacity = 0;
+  await wait(5200); window.__demoDone = true;
+}
+for (const [name, label] of [["", "No charter"], ["charter", "Charter"], ["edit", "Charter, rule 1.5 edited"]]) {
+  const b = document.createElement("button"); b.textContent = label; b.dataset.law = name; b.onclick = () => enact(name); if (!name) b.classList.add("sel"); $("lawBtns").appendChild(b);
+}
+async function lawDirector() {
+  const box = $("crierIn"), bar = $("crier"), until = async (f, max) => { const t = performance.now(); while (!f() && performance.now() - t < max) await wait(200); };
+  const shot = (place, close) => { cam.lean = place; cam.close = close || null; }, hot = (n) => { hotRule = n; lawCard(); };
+  const SCHOOL = [5, 25, 31, 0, 2], GATE = [10, 30, -30, 4, 9];
+  $("lawBtns").style.display = "none"; bar.classList.add("hide"); simSpeed = 1.2; pace = 1.35;
+  CHARTER.edition = `\n\nEnrolled by the town clerk, ${new Date().toISOString()}.`;   // a new edition, so the charter is read live, on camera
+  await loadCharter();
+  say(`${N} villagers. Every move is a live decision by one model on one DGX Spark.`); await until(() => total > 150, 16000);
+  shot("school", SCHOOL); say("No laws yet. Everyone does as they please."); await wait(7000);
+  shot("top"); await openBook(); say("This is the village charter. Eight rules of conduct."); await wait(10000);
+  say("Then 22 more titles of ordinary law: guilds, fees, fines."); await scrollBook(9.5); await wait(1200);
+  say("The model reads all of it. Once."); $("bookNote").textContent = "reading…"; $("bookFill").style.transition = "width 4.6s linear"; $("bookFill").style.width = "92%";
+  await enact("charter"); $("bookFill").style.transition = "width 0.2s"; $("bookFill").style.width = "100%"; $("bookNote").textContent = `read once · ${(CHARTER.readMs / 1000).toFixed(1)} s`; $("bookCount").textContent = `${CHARTER.tokens.toLocaleString()} tokens`;
+  say(() => `Read in ${(CHARTER.readMs / 1000).toFixed(1)} seconds. That is a knowledge pack.`); await wait(5200);
+  say("Every decision now starts from the pack. Nothing is reread."); await wait(3200); closeBook(); await wait(4200);
+  shot("school", SCHOOL); hot("1.2"); say("Rule 1.2: by day, every child is in school."); await wait(11000);
+  say(() => `${Math.round(msBy.none)} ms a decision before the charter, ${Math.round(msBy.law)} ms with it.`); await wait(6500);
+  shot("top"); hot("1.5"); bar.classList.remove("hide"); await wait(1200); bar.classList.add("typing"); box.value = ""; await wait(500);
+  for (const ch of "A stranger has arrived at the gate.") { box.value += ch; await wait(42 + Math.random() * 40); }
+  await wait(600); bar.classList.remove("typing"); announce("A stranger has arrived at the gate.", "gate"); shot("gate", GATE);
+  await wait(4000); say("Rule 1.5: only the elders go to greet a stranger."); await wait(9000); say("Everyone else carries on."); await wait(6500);
+  // one rule, rewritten on camera
+  $("told").classList.add("hide"); await openBook(); say("Now edit one rule."); await wait(2500);
+  const rule = $("bookIn").querySelector('[data-rule="1.5"]'), oldBody = RULE_OLD.slice(13), newBody = RULE_NEW.slice(13);
+  rule.classList.add("hot"); rule.innerHTML = `<b>Article 1.5.</b> <s>${oldBody}</s> <ins></ins>`; await wait(1400);
+  for (const ch of newBody) { rule.lastChild.textContent += ch; await wait(24 + Math.random() * 22); }
+  await wait(1500); say("A changed charter is a new pack. The model reads it again, once."); $("bookNote").textContent = "reading…"; $("bookFill").style.transition = "none"; $("bookFill").style.width = "0"; await wait(60);
+  $("bookFill").style.transition = "width 4.6s linear"; $("bookFill").style.width = "92%";
+  await enact("edit"); $("bookFill").style.transition = "width 0.2s"; $("bookFill").style.width = "100%"; $("bookNote").textContent = `read once · ${(CHARTER.readMs / 1000).toFixed(1)} s`;
+  await wait(3000); closeBook(); $("told").classList.remove("hide"); hot("1.5");
+  say("Same news. One rule changed."); await wait(6000); say("Now every adult leaves work for the gate."); await wait(12500);
+  shot("school", SCHOOL); hot("1.2"); say("Rule 1.2 still holds. The children stay in class."); await wait(8500);
+  shot("top"); hot(""); say(() => `A ${Math.round(CHARTER.tokens / 100) * 100}-token charter. ${Math.round(msBy.none)} ms a decision without it, ${Math.round(msBy.law)} ms with it.`); await wait(8000);
+  say("Put the same charter inside every request instead: 360 ms a decision."); await wait(7500);
+  $("endLine").textContent = `Knowledge packs · read the charter once · ${Math.round(msBy.law)} ms a decision`;
+  $("end").classList.remove("hide"); $("told").classList.add("hide"); $("law").classList.add("hide"); $("caption").style.opacity = 0;
+  await wait(5200); window.__demoDone = true;
+}
+window.__calls = [];
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener("resize", resize); resize();
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  step(dt); moveCamera(dt);
+  const dist = cam.pos.distanceTo(cam.look);
+  lighting(cam.look, dist); blades.rotation.z += dt * 0.6;
+  const high = smooth((cam.pos.y - 45) / 60); for (const s of labels) s.material.opacity = high * 0.95;
+  beacon.visible = !!(world.news && world.place);
+  if (beacon.visible) { const p = PLACES[world.place]; beacon.position.set(p.x, 0, p.z); const r = Math.max(p.hw, p.hd, 3) + 4 + Math.sin(now / 250) * 1.2; beacon.ring.scale.set(r, r, 1); }
+  drawVillagers(now, cam.pos.y);
+  renderer.render(scene, camera); window.__ready = true;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
