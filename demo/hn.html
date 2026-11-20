@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- The reader: the last 24 hours of real Hacker News posts, fed through SparkScore. As each post
+     lands the model makes four judgements about it (topic, substance, built by the poster, likely to
+     start an argument). You can ask your own yes/no question of every post, and hand it a reading
+     profile (demo/hn/profile.md) as a knowledge pack. Serve with demo/serve.py and open /hn.html
+     (?n=posts, ?demo=1 plays a scripted run and sets window.__demoDone when finished). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SparkScore · reading Hacker News</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=block">
+<style>
+:root { --text: #fff; --dim: rgba(255,255,255,0.62); --line: rgba(255,255,255,0.12); --mono: "JetBrains Mono", ui-monospace, monospace; --head: "Space Grotesk", "Inter", sans-serif; --body: "Inter", system-ui, sans-serif;
+  --u: min(1vw, 1.78vh); --ask: #ff6fd8; --you: #ffd23f; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: radial-gradient(120% 90% at 20% 0%, #151b3a 0%, #0a0d1f 60%); font-family: var(--body); color: var(--text); -webkit-font-smoothing: antialiased; }
+#top { position: absolute; left: calc(var(--u) * 2); right: calc(var(--u) * 2); top: calc(var(--u) * 1.4); height: calc(var(--u) * 6); display: flex; align-items: center; gap: calc(var(--u) * 2); }
+#brand { display: flex; align-items: center; gap: calc(var(--u) * 0.8); font: 700 calc(var(--u) * 2) var(--head); }
+#brand svg { width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); }
+#brand small { display: block; font: 500 calc(var(--u) * 0.85) var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin-top: calc(var(--u) * 0.2); }
+#what { font: 600 calc(var(--u) * 1.5) var(--head); padding-left: calc(var(--u) * 2); border-left: 1px solid var(--line); }
+#what small { display: block; font: 500 calc(var(--u) * 0.85) var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); margin-top: calc(var(--u) * 0.2); }
+#counts { margin-left: auto; display: flex; gap: calc(var(--u) * 2.6); padding: calc(var(--u) * 0.9) calc(var(--u) * 1.6); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: calc(var(--u) * 1); }
+.cnt .v { font: 700 calc(var(--u) * 2.7) var(--head); font-variant-numeric: tabular-nums; line-height: 1; } .cnt .v small { font-size: 0.5em; font-weight: 500; color: var(--dim); }
+.cnt .l { font: 500 calc(var(--u) * 0.78) var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: calc(var(--u) * 0.45); }
+/* the wall of posts */
+#wall { position: absolute; left: calc(var(--u) * 2); top: calc(var(--u) * 8.6); bottom: calc(var(--u) * 6.6); width: calc(var(--u) * 54); display: flex; gap: calc(var(--u) * 0.8); overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 82%, transparent); mask-image: linear-gradient(#000 82%, transparent); }
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: calc(var(--u) * 0.7); }
+.card { flex: none; background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-left: calc(var(--u) * 0.32) solid #555; border-radius: calc(var(--u) * 0.6); padding: calc(var(--u) * 0.6) calc(var(--u) * 0.8);
+  animation: land 0.35s ease-out; transition: opacity 0.5s, border-color 0.4s, background 0.4s; overflow: hidden; }
+@keyframes land { from { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; transform: scale(0.96); } to { max-height: calc(var(--u) * 9); opacity: 1; } }
+.card .t { font: 600 calc(var(--u) * 0.98) var(--body); line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.5em; }
+.card .d { font: 500 calc(var(--u) * 0.72) var(--mono); color: var(--dim); margin-top: calc(var(--u) * 0.2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .chips { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--u) * 0.35); margin-top: calc(var(--u) * 0.45); min-height: calc(var(--u) * 1.5); }
+.chip { font: 600 calc(var(--u) * 0.72) var(--mono); letter-spacing: 0.04em; padding: calc(var(--u) * 0.16) calc(var(--u) * 0.5); border-radius: 99px; background: rgba(255,255,255,0.12); white-space: nowrap; animation: pop 0.25s ease-out; }
+@keyframes pop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.meter { width: calc(var(--u) * 3.6); height: calc(var(--u) * 0.5); border-radius: 99px; background: rgba(255,255,255,0.14); overflow: hidden; animation: pop 0.25s ease-out; } .meter i { display: block; height: 100%; border-radius: 99px; }
+.card.hype { opacity: 0.42; } .card.hype .t { font-weight: 500; }
+.card.solid { background: rgba(80, 255, 170, 0.09); }
+.chip.ask { background: var(--ask); color: #2a0822; } .chip.you { background: var(--you); color: #2a2000; }
+/* the summary */
+#side { position: absolute; right: calc(var(--u) * 2); top: calc(var(--u) * 8.6); bottom: calc(var(--u) * 6.6); left: calc(var(--u) * 57.5); display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: calc(var(--u) * 0.9); }
+.tile { background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: calc(var(--u) * 0.9); padding: calc(var(--u) * 0.9) calc(var(--u) * 1.1); overflow: hidden; transition: border-color 0.5s, background 0.5s, opacity 0.5s; min-height: 0; }
+.tile h3 { margin: 0 0 calc(var(--u) * 0.5); font: 600 calc(var(--u) * 0.82) var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); display: flex; justify-content: space-between; gap: 1em; }
+.tile h3 b { color: #fff; font-weight: 700; }
+.row { display: flex; align-items: baseline; gap: calc(var(--u) * 0.6); font: 500 calc(var(--u) * 0.95) var(--body); line-height: 1.25; margin-top: calc(var(--u) * 0.42); }
+.row .n { flex: none; font: 600 calc(var(--u) * 0.8) var(--mono); color: var(--dim); width: calc(var(--u) * 2.3); text-align: right; }
+.row .x { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { display: grid; grid-template-columns: calc(var(--u) * 6.2) 1fr calc(var(--u) * 2); align-items: center; gap: calc(var(--u) * 0.6); font: 500 calc(var(--u) * 0.88) var(--body); margin-top: calc(var(--u) * 0.36); }
+.bar .track { height: calc(var(--u) * 0.75); border-radius: 99px; background: rgba(255,255,255,0.08); overflow: hidden; } .bar .fill { height: 100%; border-radius: 99px; transition: width 0.5s; }
+.bar .n { font: 600 calc(var(--u) * 0.8) var(--mono); text-align: right; }
+.tile.off { opacity: 0.5; border-style: dashed; } .tile.off .hint { font: 500 calc(var(--u) * 1) var(--body); color: var(--dim); line-height: 1.4; margin-top: calc(var(--u) * 0.6); }
+#tAsk.on { border-color: var(--ask); background: rgba(255, 111, 216, 0.08); } #tAsk.on h3 { color: var(--ask); }
+#tYou.on { border-color: var(--you); background: rgba(255, 210, 63, 0.07); } #tYou.on h3 { color: var(--you); }
+.q { font: 600 calc(var(--u) * 1.05) var(--head); margin-bottom: calc(var(--u) * 0.2); }
+.meta { font: 500 calc(var(--u) * 0.78) var(--mono); color: var(--dim); }
+/* ask bar, caption, end card */
+#ask { position: absolute; left: calc(var(--u) * 2); right: calc(var(--u) * 2); bottom: calc(var(--u) * 1.6); height: calc(var(--u) * 3.6); display: flex; align-items: center; gap: calc(var(--u) * 0.8); padding: 0 calc(var(--u) * 1);
+  background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: calc(var(--u) * 1); transition: border-color 0.4s, box-shadow 0.4s; }
+#ask.typing { border-color: var(--ask); box-shadow: 0 0 0 calc(var(--u) * 0.3) rgba(255, 111, 216, 0.22); }
+#ask label { font: 600 calc(var(--u) * 0.85) var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ask); white-space: nowrap; }
+#ask input { flex: 1; font: 500 calc(var(--u) * 1.25) var(--body); color: #fff; background: transparent; border: none; outline: none; }
+#ask input::placeholder { color: rgba(255,255,255,0.4); }
+#ask button { font: 500 calc(var(--u) * 0.95) var(--body); color: #fff; background: rgba(255,255,255,0.1); border: 1px solid var(--line); border-radius: 99px; padding: calc(var(--u) * 0.45) calc(var(--u) * 1); cursor: pointer; white-space: nowrap; }
+#caption { position: absolute; left: calc(var(--u) * 2); width: calc(var(--u) * 54); bottom: calc(var(--u) * 6.4); text-align: center; font: 700 calc(var(--u) * 2.3) var(--head); letter-spacing: -0.01em; line-height: 1.2;
+  text-shadow: 0 2px 24px #000, 0 0 6px #000, 0 0 40px #0a0d1f; transition: opacity 0.6s; pointer-events: none; padding: 0 calc(var(--u) * 2); z-index: 5; }
+#end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--u) * 1.4); background: rgba(8, 10, 24, 0.86); backdrop-filter: blur(10px); transition: opacity 0.9s; z-index: 30; }
+#end .big { display: flex; align-items: center; gap: calc(var(--u) * 1.4); font: 700 calc(var(--u) * 7) var(--head); letter-spacing: -0.02em; } #end .big svg { width: calc(var(--u) * 6.5); height: calc(var(--u) * 6.5); }
+#end .line { font: 600 calc(var(--u) * 2.4) var(--head); } #end .url { font: 500 calc(var(--u) * 1.5) var(--mono); color: var(--dim); margin-top: calc(var(--u) * 1); }
+.hide { opacity: 0; pointer-events: none; }
+#side.you { grid-template-rows: 0.8fr 1.35fr 0.85fr; } #side.you #tBuilt { display: none; } #side.you #tYou { grid-column: 1 / 3; grid-row: 2; } #side.you #tAsk { grid-row: 3; grid-column: 1; } #side.you #tHeat { grid-row: 3; grid-column: 2; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 1.4); margin-top: calc(var(--u) * 0.5); } .two > div { min-width: 0; }
+.two h4 { margin: 0; font: 700 calc(var(--u) * 0.85) var(--mono); letter-spacing: 0.1em; text-transform: uppercase; } .two .open h4 { color: #6dffae; } .two .skip h4 { color: #ff8a8a; } .two .skip .x { color: var(--dim); }
+#profile { position: absolute; left: calc(var(--u) * 2); right: calc(var(--u) * 2); top: calc(var(--u) * 8.6); bottom: calc(var(--u) * 6.6); background: #f6eedb; color: #2a2317; border-radius: calc(var(--u) * 0.8); z-index: 10;
+  box-shadow: 0 calc(var(--u) * 1.2) calc(var(--u) * 4) rgba(0,0,0,0.5); transition: opacity 0.6s, transform 0.6s; display: flex; flex-direction: column; overflow: hidden; }
+#profile.hide { transform: translateY(calc(var(--u) * 2)); }
+#profIn { flex: 1; padding: calc(var(--u) * 1.6) calc(var(--u) * 2.4) 0; column-count: 3; column-gap: calc(var(--u) * 2.6); font: 400 calc(var(--u) * 0.84) Georgia, "Times New Roman", serif; line-height: 1.34; overflow: hidden; }
+#profIn h1 { font: 700 calc(var(--u) * 1.9) Georgia, serif; margin: 0 0 calc(var(--u) * 0.5); }
+#profIn h2 { font: 700 calc(var(--u) * 1.15) Georgia, serif; margin: calc(var(--u) * 0.8) 0 calc(var(--u) * 0.3); padding: calc(var(--u) * 0.15) calc(var(--u) * 0.5); border-radius: calc(var(--u) * 0.25); background: #e9dfc6; break-after: avoid; }
+#profIn h2.open { background: #bfeecd; } #profIn h2.skip { background: #f6c4bd; }
+#profIn p { margin: 0 0 calc(var(--u) * 0.42); break-inside: avoid; }
+#profFoot { flex: none; padding: calc(var(--u) * 0.7) calc(var(--u) * 2.4); background: #e9dfc6; font: 600 calc(var(--u) * 0.95) var(--mono); color: #4a3d25; display: flex; justify-content: space-between; }
+body.reading #caption { left: 0; right: 0; width: auto; bottom: calc(var(--u) * 2.1); text-shadow: none; z-index: 12; }
+body.reading #caption span { background: #0a0d1f; padding: calc(var(--u) * 0.3) calc(var(--u) * 1.2); border-radius: calc(var(--u) * 0.6); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+#down { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 14px 20px; font: 600 16px var(--body); background: #400; border-radius: 10px; display: none; z-index: 40; }
+</style>
+</head>
+<body>
+<div id="top">
+  <div id="brand"><svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ee8ff"/><stop offset="1" stop-color="#b07bff"/></linearGradient></defs>
+    <path d="M20 2 L24 16 L38 20 L24 24 L20 38 L16 24 L2 20 L16 16 Z" fill="url(#lg)"/></svg><div>SparkScore<small>live on one DGX Spark</small></div></div>
+  <div id="what">Hacker News, the last 24 hours<small id="whatSub">real posts · titles and domains only</small></div>
+  <div id="counts">
+    <div class="cnt"><div class="v"><span id="cPosts">0</span><small> / <span id="cAll">0</span></small></div><div class="l">posts read</div></div>
+    <div class="cnt"><div class="v" id="cTotal">0</div><div class="l">judgements made</div></div>
+    <div class="cnt"><div class="v" id="cRate">0</div><div class="l">judgements / second</div></div>
+    <div class="cnt"><div class="v"><span id="cMs">–</span><small> ms</small></div><div class="l">per judgement, live</div></div>
+  </div>
+</div>
+<div id="wall"><div class="col"></div><div class="col"></div><div class="col"></div><div class="col"></div></div>
+<div id="side">
+  <div class="tile" id="tTopic"><h3>What it is about</h3><div id="topicBars"></div></div>
+  <div class="tile" id="tSub"><h3>Most substance <b id="nSub"></b></h3><div id="lSub"></div></div>
+  <div class="tile" id="tBuilt"><h3>Built by the poster <b id="nBuilt"></b></h3><div id="lBuilt"></div></div>
+  <div class="tile" id="tHeat"><h3>Likely to start an argument <b id="nHeat"></b></h3><div id="lHeat"></div></div>
+  <div class="tile off" id="tAsk"><h3>Your question <b id="nAsk"></b></h3><div id="lAsk"><div class="hint">Type any yes/no question below. Every post answers it.</div></div></div>
+  <div class="tile off" id="tYou"><h3>For this reader <b id="nYou"></b></h3><div id="lYou"><div class="hint">Give it a reading profile. It is read once, as a knowledge pack, and every post is judged against it.</div></div></div>
+</div>
+<div id="profile" class="hide"><div id="profIn"></div><div id="profFoot"><span id="profNote">the reading profile</span><span id="profCount"></span></div></div>
+<div id="caption"></div>
+<div id="ask"><label>Ask every post</label><input id="askIn" placeholder="a yes/no question, then Enter: is it about a database?" autocomplete="off" spellcheck="false"><button id="youBtn">Use the reading profile</button></div>
+<div id="end" class="hide"><div class="big"><svg viewBox="0 0 40 40"><path d="M20 2 L24 16 L38 20 L24 24 L20 38 L16 24 L2 20 L16 16 Z" fill="url(#lg)"/></svg>SparkScore</div>
+  <div class="line" id="endLine"></div><div class="url">github.com/Enntity/sparkscore</div></div>
+<div id="down">SparkScore is not answering.</div>
+<script>
+const $ = (id) => document.getElementById(id), Q = new URLSearchParams(location.search);
+const N = Math.max(16, Math.min(1000, +Q.get("n") || 288)), K = 16, DEMO = Q.get("demo");
+const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const TOPICS = {
+  ai: ["AI and machine learning", "#b07bff"], security: ["security and privacy", "#ff5d5d"], code: ["programming and software tools", "#3ee8ff"], hardware: ["hardware and devices", "#ff9d3c"],
+  science: ["science and space", "#5dff9a"], business: ["business, money and companies", "#ffd23f"], politics: ["politics, law and world news", "#ff7fb0"], culture: ["culture, life and everything else", "#9aa3c7"],
+};
+// One label is one pass over 16 posts. A label is a topic choice or a yes/no question; the answer is a probability.
+const LABELS = [
+  { key: "topic", choice: true },
+  { key: "sub", text: "Is the post real substance for a technical reader: something built, measured or explained, not hype, outrage or gossip?" },
+  { key: "built", text: "Is the poster showing something they made themselves?" },
+  { key: "heat", text: "Is the post likely to start an argument?" },
+];
+let posts = [], arrived = 0, total = 0, stamps = [], msEach = 0, busy = false, col = 0;
+const msBy = { plain: 0, pack: 0 };
+
+async function load() {
+  const since = Math.floor(Date.now() / 1000) - 86400, hits = [];
+  for (let page = 0; page < 2; page++) {     // the day's stories with a few points, newest first
+    const r = await fetch(`https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=500&page=${page}&numericFilters=created_at_i>${since},points>2`);
+    const j = await r.json(); hits.push(...j.hits); if (page + 1 >= j.nbPages) break;
+  }
+  const rude = /\b(fuck|shit|porn|nsfw|rape|suicide)/i;        // real titles, minus the few a public screen should not show
+  posts = hits.filter((h) => h.title && !rude.test(h.title)).slice(0, N).reverse().map((h, i) => {
+    let domain = "news.ycombinator.com"; try { if (h.url) domain = new URL(h.url).hostname.replace(/^www\./, ""); } catch {}
+    return { i, title: h.title, domain, points: h.points || 0, at: h.created_at_i, got: {}, el: null };
+  });
+  $("cAll").textContent = posts.length;
+}
+
+function stateFor(label, batch) {
+  const list = batch.map((p, n) => `Post ${n + 1}: ${p.title} (${p.domain})`).join("\n");
+  const ask = label.choice ? "Choose what each post is about.\nThe topics:\n" + Object.entries(TOPICS).map(([k, [say]]) => `${k}: ${say}`).join("\n")
+    : label.pack ? "Answer yes if this reader would want to read the post, going by their reading profile above, and no if they would skip it."
+    : `The question for every post: ${label.text}`;
+  return `These are link posts from Hacker News, a technology news site. Each question names one post by its number.\n${ask}\n\nPosts:\n${list}`;
+}
+function nextJob() {
+  // Pull 16 new posts only when the other labels have caught up, so labels land soon after the post does.
+  const waiting = LABELS.filter((l) => !l.choice).map((l) => [l, posts.slice(0, arrived).filter((p) => !(l.key in p.got) && !p.busy?.[l.key])]).filter(([, w]) => w.length);
+  const full = waiting.filter(([, w]) => w.length >= K).sort((a, b) => b[1].length - a[1].length)[0];
+  if (full) return [full[0], full[1].slice(0, K)];
+  if (arrived < posts.length) return [LABELS[0], posts.slice(arrived, arrived + K)];
+  const rest = waiting.sort((a, b) => b[1].length - a[1].length)[0];
+  return rest ? [rest[0], rest[1].slice(0, K)] : null;
+}
+async function pump() {
+  if (busy || !posts.length) return;
+  const job = nextJob(); if (!job) return;
+  const [label, batch] = job; busy = true;
+  for (const p of batch) (p.busy ||= {})[label.key] = true;
+  if (label.choice) { arrived += batch.length; }
+  const questions = {}, criteria = Object.fromEntries(Object.keys(TOPICS).map((k) => [k, null]));
+  batch.forEach((p, n) => { questions["p" + n] = label.choice ? { type: "choice", instructions: `Post ${n + 1}`, criteria } : { type: "noul", instructions: `Post ${n + 1}` }; });
+  const body = { model: "sparkscore-d3", state: stateFor(label, batch), questions }; if (label.pack) body.knowledge_name = label.pack;
+  const t0 = performance.now();
+  try {
+    const r = await fetch("/v1/systemone", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+    const j = await r.json(), ms = performance.now() - t0; $("down").style.display = "none";
+    msEach = msEach ? msEach * 0.7 + (ms / batch.length) * 0.3 : ms / batch.length;
+    if (batch.length === K && !reading && !label.choice) { const k = label.pack ? "pack" : "plain"; msBy[k] = msBy[k] ? msBy[k] * 0.8 + (ms / K) * 0.2 : ms / K; }
+    // The pass answers all 16 at once; show them one by one until this label's next pass is due, so the wall never stalls.
+    const done = performance.now(), spread = label.done ? Math.max(ms, Math.min(done - label.done, 3000)) : ms; label.done = done;
+    batch.forEach((p, n) => setTimeout(() => {
+      const a = j.answers["p" + n]; p.busy[label.key] = false; if (!a) return;
+      p.got[label.key] = label.choice ? a.choice : a.noul;
+      total++; stamps.push(performance.now()); show(p, label); dirty = true;
+    }, n * spread / batch.length));
+  } catch (error) {
+    console.warn(error); $("down").style.display = "block"; for (const p of batch) p.busy[label.key] = false; if (label.choice) arrived -= batch.length;
+    await new Promise((r) => setTimeout(r, 1000));
+  } finally { busy = false; }
+}
+setInterval(pump, 20);
+
+// ------------------------------------------------------------------ the wall
+const cols = [...$("wall").children];
+function show(p, label) {
+  if (!p.el || !p.el.isConnected) {            // a post lands on the wall when its first answer arrives (or returns to it for a new question)
+    p.el = document.createElement("div"); p.el.className = "card";
+    p.el.innerHTML = `<div class="t">${esc(p.title)}</div><div class="d">${esc(p.domain)} · ${p.points} points</div><div class="chips"></div>`;
+    const c = cols[col++ % cols.length]; c.prepend(p.el); while (c.children.length > 9) c.lastChild.remove();
+    for (const l of [...LABELS]) if (l !== label && l.key in p.got) chip(p, l, false);
+  }
+  chip(p, label, true);
+}
+function chip(p, label, fresh) {
+  const box = p.el.querySelector(".chips"), v = p.got[label.key]; let h = "";
+  if (label.choice) { const [, color] = TOPICS[v] || TOPICS.culture; p.el.style.borderLeftColor = color; h = `<span class="chip" style="background:${color};color:#0a0d1f">${esc(v)}</span>`; }
+  else if (label.key === "sub") { p.el.classList.toggle("hype", v < 0.38); p.el.classList.toggle("solid", v > 0.8); h = `<span class="meter" title="substance"><i style="width:${Math.round(v * 100)}%;background:hsl(${Math.round(v * 140)} 85% 58%)"></i></span>`; }
+  else if (label.key === "built") h = v > 0.6 ? `<span class="chip">🛠 built it</span>` : "";
+  else if (label.key === "heat") h = v > 0.6 ? `<span class="chip">🔥 heated</span>` : "";
+  else if (label.pack) h = v > 0.5 ? `<span class="chip you">★ for you</span>` : "";
+  else h = v > 0.5 ? `<span class="chip ask">✓ yes ${Math.round(v * 100)}%</span>` : `<span class="chip" style="opacity:.55">no</span>`;
+  if (h) { box.insertAdjacentHTML("beforeend", h); if (!fresh) box.lastChild.style.animation = "none"; }
+}
+
+// --------------------------------------------------------------- the summary
+let dirty = false;
+const best = (key, n, min = 0) => posts.filter((p) => p.got[key] > min).sort((a, b) => b.got[key] - a.got[key]).slice(0, n);
+const rows = (list, key) => list.map((p) => `<div class="row"><span class="n">${Math.round(p.got[key] * 100)}%</span><span class="x">${esc(p.title)}</span></div>`).join("");
+const have = (key) => posts.filter((p) => key in p.got);
+function summary() {
+  const now = performance.now(); stamps = stamps.filter((s) => now - s < 4000);
+  $("cPosts").textContent = have("topic").length; $("cTotal").textContent = total.toLocaleString(); $("cRate").textContent = Math.round(stamps.length / 4); if (msEach) $("cMs").textContent = Math.round(msEach);
+  if (!dirty) return; dirty = false;
+  const counts = {}; for (const p of have("topic")) counts[p.got.topic] = (counts[p.got.topic] || 0) + 1;
+  const max = Math.max(1, ...Object.values(counts));
+  $("topicBars").innerHTML = Object.keys(TOPICS).sort((a, b) => (counts[b] || 0) - (counts[a] || 0)).map((k) => `<div class="bar"><span>${k}</span><div class="track"><div class="fill" style="width:${100 * (counts[k] || 0) / max}%;background:${TOPICS[k][1]}"></div></div><span class="n">${counts[k] || 0}</span></div>`).join("");
+  $("lSub").innerHTML = rows(best("sub", 6), "sub"); $("nSub").textContent = have("sub").length ? `${have("sub").filter((p) => p.got.sub < 0.38).length} dimmed as hype` : "";
+  $("lBuilt").innerHTML = rows(best("built", 6), "built"); $("nBuilt").textContent = have("built").filter((p) => p.got.built > 0.6).length || "";
+  $("lHeat").innerHTML = rows(best("heat", 6), "heat"); $("nHeat").textContent = have("heat").filter((p) => p.got.heat > 0.6).length || "";
+  for (const [l, list, n, extra] of [[askLabel, "lAsk", "nAsk", askLabel && `<div class="q">${esc(askLabel.text)}</div>`], [youLabel, "lYou", "nYou", youLabel && `<div class="meta">${esc(youLabel.meta)}</div>`]]) {
+    if (!l) continue; const done = have(l.key);
+    $(n).textContent = `${done.filter((p) => p.got[l.key] > 0.5).length} yes of ${done.length}`;
+    $(list).innerHTML = l !== youLabel ? extra + rows(best(l.key, 4, 0.5), l.key)
+      : extra + `<div class="two"><div class="open"><h4>Would open</h4>${rows(best(l.key, 6, 0.5), l.key)}</div><div class="skip"><h4>Would skip</h4>${rows([...done].sort((a, b) => a.got[l.key] - b.got[l.key]).slice(0, 6), l.key)}</div></div>`;
+  }
+}
+setInterval(summary, 250);
+
+// ----------------------------------------------- your question, and the reader
+let askLabel = null, youLabel = null, reading = false, askCount = 0;
+function ask(text) {
+  if (askLabel) LABELS.splice(LABELS.indexOf(askLabel), 1);
+  askLabel = { key: "ask" + (++askCount), text }; LABELS.push(askLabel);
+  $("tAsk").classList.remove("off"); $("tAsk").classList.add("on"); $("lAsk").innerHTML = `<div class="q">${esc(text)}</div>`; $("nAsk").textContent = ""; dirty = true;
+}
+async function showProfile() {
+  const text = (await (await fetch("hn/profile.md")).text()).trim();
+  $("profIn").innerHTML = text.split("\n").filter(Boolean).map((line) => line.startsWith("# ") ? `<h1>${esc(line.slice(2))}</h1>`
+    : line.startsWith("## ") ? `<h2 class="${/open every/.test(line) ? "open" : /skip every/.test(line) ? "skip" : ""}">${esc(line.slice(3))}</h2>` : `<p>${esc(line).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</p>`).join("");
+  $("profCount").textContent = `${text.split(/\s+/).length} words`; $("profNote").textContent = "the reading profile"; $("profile").classList.remove("hide"); document.body.classList.add("reading");
+}
+function hideProfile() { $("profile").classList.add("hide"); document.body.classList.remove("reading"); }
+async function useProfile(edition = "") {       // the profile is sent once; later passes name it
+  if (youLabel || reading) return; reading = true;
+  $("tYou").classList.remove("off"); $("tYou").classList.add("on"); $("lYou").innerHTML = `<div class="meta">reading the profile…</div>`;
+  try {
+    const base = (await (await fetch("hn/profile.md")).text()).trim(), text = base + edition, t0 = performance.now();
+    const r = await fetch("/v1/knowledge/hn-reader", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
+    if (!r.ok) throw new Error(await r.text());
+    const j = await r.json(), s = ((performance.now() - t0) / 1000).toFixed(1);
+    youLabel = { key: "you", pack: "hn-reader", words: text.split(/\s+/).length, tokens: j.pack_tokens, readS: s,
+      meta: `${base.split(/\s+/).length} words · ${j.pack_tokens.toLocaleString()} tokens · ${j.pack === "held" ? "already read" : `read once in ${s} s`}` };
+    LABELS.push(youLabel); $("side").classList.add("you"); dirty = true;
+  } catch (error) { console.warn(error); $("lYou").innerHTML = `<div class="meta">could not read the profile</div>`; } finally { reading = false; }
+}
+$("askIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.value.trim()) ask(e.target.value.trim()); });
+$("youBtn").onclick = async () => { await showProfile(); await useProfile(); setTimeout(hideProfile, 6000); };
+
+// ------------------------------------------------------ the scripted recording
+let capTimer = 0;
+function say(text, ms = 0) { const c = $("caption"); c.innerHTML = `<span>${esc(typeof text === "function" ? text() : text)}</span>`; c.style.opacity = 1; clearTimeout(capTimer); if (ms) capTimer = setTimeout(() => { c.style.opacity = 0; }, ms); }
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (f, max) => { const t = performance.now(); while (!f() && performance.now() - t < max) await wait(200); };
+const rate = () => Math.round(stamps.length / 4);
+async function director() {
+  $("youBtn").style.display = "none";
+  say("Every Hacker News post from the last 24 hours."); await wait(6500);
+  say("As each one lands, a model makes four judgements about it."); await wait(7500);
+  say("What it is about. Whether it has substance."); await wait(7000);
+  say("Whether the poster built it. Whether it will start a fight."); await wait(7500);
+  say(() => `${rate()} judgements a second, about ${Math.round(msBy.plain)} ms each. One DGX Spark.`); await wait(8000);
+  say("No text is generated. Every answer is a probability."); await until(() => have("heat").length >= posts.length, 40000); await wait(1500);
+  say("Now ask your own question."); $("ask").classList.add("typing"); await wait(1800);
+  for (const ch of "Is it bad news for a big company?") { $("askIn").value += ch; await wait(55 + Math.random() * 45); }
+  await wait(700); $("ask").classList.remove("typing"); ask($("askIn").value);
+  await wait(2500); say(() => `All ${posts.length} posts are answering it.`); await until(() => have(askLabel.key).length >= posts.length, 30000);
+  say(() => `${posts.length} posts, one new question, ${Math.round(posts.length / Math.max(1, rate()))} seconds.`, 0); await wait(6500);
+  say("Now give it a reader."); await wait(2500); await showProfile();
+  say("740 words: what one reader opens, and what they skip."); await wait(15000);
+  $("profNote").textContent = "reading…"; useProfile(`\n\nRevised ${new Date().toISOString()}.`); await until(() => youLabel, 20000);
+  $("profNote").textContent = `read once · ${youLabel.readS} s · ${youLabel.tokens.toLocaleString()} tokens`;
+  say(() => `The model reads it once, in ${youLabel.readS} seconds. That is a knowledge pack.`); await wait(6500); hideProfile();
+  say("Every post is now judged against the whole profile."); await until(() => have("you").length >= posts.length, 40000);
+  say(() => `${have("you").filter((p) => p.got.you > 0.5).length} of ${posts.length} posts are for this reader.`); await wait(9000);
+  say(() => `${Math.round(msBy.plain)} ms a judgement without the profile, ${Math.round(msBy.pack)} ms with it.`); await wait(7500);
+  $("endLine").textContent = `${total.toLocaleString()} judgements · one DGX Spark · ${Math.round(msBy.plain)} ms each`;
+  $("end").classList.remove("hide"); $("caption").style.opacity = 0; await wait(5000); window.__demoDone = true;
+}
+window.__calls = [];
+load().then(() => { window.__ready = true; if (DEMO) director(); }).catch((e) => { console.warn(e); $("down").textContent = "Could not load Hacker News."; $("down").style.display = "block"; });
+</script>
+</body>
+</html>

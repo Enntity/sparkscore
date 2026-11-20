@@ -858,7 +858,7 @@ async function lawDirector() {
   say(() => `Read in ${(CHARTER.readMs / 1000).toFixed(1)} seconds. That is a knowledge pack.`); await wait(5200);
   say("Every decision now starts from the pack. Nothing is reread."); await wait(3200); closeBook(); await wait(4200);
   shot("school", SCHOOL); hot("1.2"); say("Rule 1.2: by day, every child is in school."); await wait(11000);
-  say(() => `Speed, honestly: ${Math.round(msBy.none)} ms a decision before the charter, ${Math.round(msBy.law)} ms with it.`); await wait(6500);
+  say(() => `${Math.round(msBy.none)} ms a decision before the charter, ${Math.round(msBy.law)} ms with it.`); await wait(6500);
   shot("top"); hot("1.5"); bar.classList.remove("hide"); await wait(1200); bar.classList.add("typing"); box.value = ""; await wait(500);
   for (const ch of "A stranger has arrived at the gate.") { box.value += ch; await wait(42 + Math.random() * 40); }
   await wait(600); bar.classList.remove("typing"); announce("A stranger has arrived at the gate.", "gate"); shot("gate", GATE);
