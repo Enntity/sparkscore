@@ -31,7 +31,19 @@ GIT_LFS_SKIP_SMUDGE=1 git -C "$context/engine" -c advice.detachedHead=false chec
 git -C "$product" archive HEAD install tools LICENSE NOTICE | tar -x -C "$context"
 cp "$here/dockerignore" "$context/.dockerignore"
 
-docker build --build-arg "SOURCE_TREE=$tree" --build-arg "BUILD_JOBS=${ATLAS_BUILD_JOBS:-8}" \
+# Compile jobs: every core, but no more than one per 3 GB of the host memory
+# available now, so a build beside running models cannot run a GB10 out of
+# memory (it hangs instead of killing a process). ATLAS_BUILD_JOBS overrides.
+# Measured on a GB10 (2026-11-24, SparkInkling's engine, a core crate
+# touched): release binary and test-suite compile in 239 s at 4 jobs, 132 s
+# at 20, with host memory use under 8 GB. The CUDA kernels compile on every
+# core whatever this is.
+jobs=${ATLAS_BUILD_JOBS:-$(awk -v cores="$(nproc 2>/dev/null || echo 4)" \
+  '/^MemAvailable:/ { j = int($2 / 3145728); if (j > cores) j = cores; if (j < 4) j = 4; print j }' \
+  /proc/meminfo 2>/dev/null)}
+[[ ${jobs:-} =~ ^[1-9][0-9]*$ ]] || jobs=4
+echo "build: $jobs compile jobs" >&2
+docker build --build-arg "SOURCE_TREE=$tree" --build-arg "BUILD_JOBS=$jobs" \
   -f "$context/install/Dockerfile" -t "$image" "$context" >&2
 [[ $(docker image inspect -f '{{.Architecture}} {{index .Config.Labels "io.enntity.sparkscore.source-tree"}}' "$image") == "arm64 $tree" ]] || {
   echo "built image $image has the wrong architecture or source-tree label" >&2; exit 1; }
